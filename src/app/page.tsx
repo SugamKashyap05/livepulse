@@ -1,65 +1,125 @@
-import Image from "next/image";
+import { prisma } from "@/lib/db"
+import { fetchAllFeeds } from "@/lib/fetchFeeds"
+import Header from "@/components/Header"
+import NewsCard from "@/components/NewsCard"
+import { ALL_TOPICS } from "@/lib/sources"
+import { NewsItem } from "@/types/news"
+import { formatDistanceToNow } from "date-fns"
 
-export default function Home() {
+export const revalidate = 300
+export const dynamic = "force-dynamic"
+
+async function getNews(): Promise<NewsItem[]> {
+  try {
+    const articles = await prisma.newsArticle.findMany({
+      orderBy: { pubDate: "desc" },
+      take: 200,
+    })
+
+    const formattedArticles = articles.map((a: any) => ({
+      id: a.id,
+      title: a.title,
+      description: a.description || "",
+      link: a.link,
+      pubDate: formatDistanceToNow(new Date(a.pubDate), { addSuffix: true }),
+      source: a.source,
+      topic: a.topic,
+      image: a.image || undefined,
+    }))
+
+    if (formattedArticles.length === 0) {
+      console.log("[LivePulse] DB empty — doing live fetch...")
+      const live = await fetchAllFeeds()
+      return live.map(item => ({
+        ...item,
+        pubDate: formatDistanceToNow(new Date(item.pubDate), { addSuffix: true })
+      }))
+    }
+
+    return formattedArticles
+  } catch (error) {
+    console.error("[LivePulse] DB read failed, falling back to RSS:", error)
+    const live = await fetchAllFeeds()
+    return live.map(item => ({
+      ...item,
+      pubDate: formatDistanceToNow(new Date(item.pubDate), { addSuffix: true })
+    }))
+  }
+}
+
+export default async function HomePage() {
+  const news = await getNews()
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <>
+      <Header />
+      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 24px" }}>
+
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 20,
+          marginBottom: 24,
+          fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: 11,
+          color: "var(--muted)",
+        }}>
+          <span style={{ color: "var(--accent)" }}>◆ {news.length} articles loaded</span>
+          <span>·</span>
+          <span>13 sources active</span>
+          <span>·</span>
+          <span>Auto-refresh every 5 min</span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          marginBottom: 28,
+        }}>
+          {ALL_TOPICS.map((topic: any) => (
+            <a
+              key={topic.slug}
+              href={topic.slug === "all" ? "/" : `/topic/${topic.slug}`}
+              style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: 11,
+                letterSpacing: "1px",
+                textTransform: "uppercase",
+                padding: "6px 14px",
+                border: "1px solid var(--border2)",
+                borderRadius: 2,
+                color: topic.slug === "all" ? "var(--accent)" : "var(--muted)",
+                borderColor: topic.slug === "all" ? "var(--accent)" : "var(--border2)",
+                textDecoration: "none",
+              }}
+            >
+              {topic.label}
+            </a>
+          ))}
         </div>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+          gap: 16,
+        }}>
+          {news.map((item: any) => (
+            <NewsCard key={item.id} item={item} />
+          ))}
+        </div>
+
+        {news.length === 0 && (
+          <div style={{
+            textAlign: "center",
+            padding: "80px 0",
+            fontFamily: "'IBM Plex Mono', monospace",
+            color: "var(--muted)",
+          }}>
+            No articles loaded. Check your internet connection.
+          </div>
+        )}
       </main>
-    </div>
-  );
+    </>
+  )
 }

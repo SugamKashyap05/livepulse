@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./livepulse.db"
+}
+
+model NewsArticle {
+  id          String   @id
+  title       String
+  description String?
+  link        String   @unique
+  pubDate     DateTime
+  source      String
+  topic       String
+  slug        String
+  image       String?
+  fetchedAt   DateTime @default(now())
+
+  // AI Fields
+  summary    String?
+  sentiment  String?   // "positive" | "neutral" | "negative"
+  aiTags     String?   // JSON string of tags
+  scored     Boolean  @default(false)
+
+  @@index([topic])
+  @@index([slug])
+  @@index([fetchedAt])
+}
+
+model DailyDigest {
+  id        String   @id @default(cuid())
+  date      String   @unique  // "2026-03-27"
+  content   String            // AI generated briefing
+  createdAt DateTime @default(now())
+}
+
+model AiLog {
+  id        String   @id @default(cuid())
+  action    String            // "summarize" | "tag" | "sentiment" | "chat"
+  model     String            // "llama3" | "qwen"
+  prompt    String?
+  tokens    Int?
+  ms        Int?              // response time in milliseconds
+  createdAt DateTime @default(now())
+}
