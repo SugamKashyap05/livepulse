@@ -5,6 +5,7 @@ export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url)
   const id = searchParams.get("id")
   const topic = searchParams.get("topic")
+  const confirm = searchParams.get("confirm")
 
   try {
     if (id) {
@@ -17,6 +18,13 @@ export async function DELETE(request: Request) {
         where: { topic },
       })
       return NextResponse.json({ success: true, deleted: result.count })
+    }
+
+    if (confirm !== "true") {
+      return NextResponse.json(
+        { success: false, error: "Missing id, topic, or confirm=true" },
+        { status: 400 }
+      )
     }
 
     const result = await prisma.newsArticle.deleteMany({})

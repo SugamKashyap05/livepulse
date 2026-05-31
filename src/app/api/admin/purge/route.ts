@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server"
+import { isAdminAuthorized } from "@/lib/adminAuth"
 import { prisma } from "@/lib/db"
 
 export async function DELETE(request: Request) {
+  if (!isAdminAuthorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   const { searchParams } = new URL(request.url)
   const days = parseInt(searchParams.get("days") || "3")
 
