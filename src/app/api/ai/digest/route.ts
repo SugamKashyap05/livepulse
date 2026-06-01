@@ -1,75 +1,75 @@
-import { chat, MODELS } from "@/lib/ollama"
+import { NextResponse } from "next/server"
+import { prisma } from "@/lib/db"
+import { generateDigest, logAiAction } from "@/lib/ollama"
 
-export const dynamic = "force-dynamic"
+export const maxDuration = 60
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const today = new Date().toISOString().split("T")[0]
+    const today = new Date().toISOString().slice(0, 10)
 
-    // 1. Check if cache exists
     const existing = await prisma.dailyDigest.findUnique({
-      where: { date: today }
+      where: { date: today },
     })
 
     if (existing) {
-      return new Response(JSON.stringify(existing), {
-        headers: { "Content-Type": "application/json" }
+      return NextResponse.json({
+        digest: existing.content,
+        date: today,
+        cached: true,
+        model: existing.model,
       })
     }
 
-    // 2. Fetch today's top articles
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+
     const articles = await prisma.newsArticle.findMany({
+      where: { fetchedAt: { gte: todayStart } },
       orderBy: { pubDate: "desc" },
-      take: 25,
-      select: { title: true, source: true, description: true }
+      take: 30,
+      select: { title: true, source: true, topic: true },
     })
 
     if (articles.length === 0) {
-      return new Response(JSON.stringify({ content: "Not enough news yet to generate a digest. Check back later!" }), {
-        headers: { "Content-Type": "application/json" }
+      const fallback = await prisma.newsArticle.findMany({
+        orderBy: { pubDate: "desc" },
+        take: 30,
+        select: { title: true, source: true, topic: true },
       })
+      articles.push(...fallback)
     }
 
-    // 3. Generate Digest
-    const context = articles.map(a => `[${a.source}] ${a.title}: ${a.description}`).join("\n---\n")
-    
-    const prompt = `You are a professional news editor. Based on the following articles from today, write a "Daily Briefing" for our readers.
-    The briefing should be around 5 paragraphs long and cover the most significant trends and stories.
-    Be engaging, insightful, and concise. Use clear headings.
+    const start = Date.now()
+    const model = process.env.OLLAMA_MODEL_DIGEST || "llama3"
+    let content: string
+    try {
+      content = await generateDigest(articles)
+    } catch (error) {
+      console.error("[AI digest unavailable]:", error)
+      return NextResponse.json(
+        { error: "AI service unavailable", fallback: true },
+        { status: 503 }
+      )
+    }
+    const ms = Date.now() - start
 
-    Articles Context:
-    ${context}
-
-    Morning Briefing:`
-
-    const aiResponse = await chat(prompt, MODELS.DIGEST)
-
-    // 4. Save to DB
-    const digest = await prisma.dailyDigest.create({
-      data: {
-        date: today,
-        content: aiResponse.text
-      }
+    await prisma.dailyDigest.upsert({
+      where: { date: today },
+      update: { content, model },
+      create: { date: today, content, model },
     })
 
-    // Log action
-    await prisma.aiLog.create({
-        data: {
-            action: "digest",
-            model: MODELS.DIGEST,
-            ms: aiResponse.ms
-        }
-    })
+    await logAiAction("digest", model, ms)
 
-    return new Response(JSON.stringify(digest), {
-      headers: { "Content-Type": "application/json" }
-    })
-
+    return NextResponse.json({ digest: content, date: today, cached: false, model })
   } catch (error) {
-    console.error("[Digest API Error]:", error)
-    return new Response(JSON.stringify({ error: "Failed to generate digest" }), { 
-      status: 500,
-      headers: { "Content-Type": "application/json" }
-    })
+    return NextResponse.json({ error: String(error) }, { status: 500 })
   }
+}
+
+export async function DELETE() {
+  const today = new Date().toISOString().slice(0, 10)
+  await prisma.dailyDigest.deleteMany({ where: { date: today } })
+  return NextResponse.json({ success: true, message: "Digest cleared — regenerate by calling GET" })
 }

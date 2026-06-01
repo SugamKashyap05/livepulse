@@ -81,7 +81,12 @@ export const FEED_SOURCES: FeedSource[] = [
   },
 ]
 
-export const ALL_TOPICS = [
+export interface AreaTopic {
+  label: string
+  slug: string
+}
+
+export const ALL_TOPICS: AreaTopic[] = [
   { label: "All", slug: "all" },
   { label: "World", slug: "world" },
   { label: "Technology", slug: "technology" },

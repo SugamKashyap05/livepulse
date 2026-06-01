@@ -20,29 +20,52 @@ model NewsArticle {
   fetchedAt   DateTime @default(now())
 
   // AI Fields
-  summary    String?
-  sentiment  String?   // "positive" | "neutral" | "negative"
-  aiTags     String?   // JSON string of tags
-  scored     Boolean  @default(false)
+  summary      String?
+  sentiment    String?   // "positive" | "neutral" | "negative"
+  aiTags       String?   // JSON string of tags
+  aiProcessed  Boolean   @default(false)
+  aiGenerated  Boolean   @default(false) // Articles created by Scout
+  
+  // Agentic Phase
+  factScore    Int?      // 0-100
+  biasAnalysis String?   // Short summary of political/emotional bias
+  agentNotes   String?   // Internal agent discussion notes
+  published    Boolean   @default(true) // Set to false for AI drafts
+  scored       Boolean   @default(false) // Used for batch processing tracking
 
   @@index([topic])
   @@index([slug])
   @@index([fetchedAt])
 }
 
+model AgentActivity {
+  id        String   @id @default(cuid())
+  agent     String   // "Scout" | "Fact-Checker" | "Spin-Doctor"
+  action    String   // "Verifying" | "Analyzing Bias" | "Scanning"
+  targetId  String?  // Article ID
+  status    String   // "thinking" | "completed" | "error"
+  content   String?  // The "thought" or result snippet
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model DailyDigest {
   id        String   @id @default(cuid())
   date      String   @unique  // "2026-03-27"
   content   String            // AI generated briefing
+  model     String?           // The model used for this digest
   createdAt DateTime @default(now())
 }
 
 model AiLog {
   id        String   @id @default(cuid())
   action    String            // "summarize" | "tag" | "sentiment" | "chat"
-  model     String            // "llama3" | "qwen"
+  model     String            // "llama3"
   prompt    String?
   tokens    Int?
-  ms        Int?              // response time in milliseconds
+  ms        Int?
+  success   Boolean          @default(true)
+  error     String?
   createdAt DateTime @default(now())
 }

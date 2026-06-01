@@ -1,4 +1,7 @@
+import Link from "next/link"
+
 export default function Header() {
+
   return (
     <header style={{
       background: "var(--bg)",
@@ -34,6 +37,29 @@ export default function Header() {
             LivePulse
           </span>
         </div>
+
+        <nav style={{ flex: 1, display: "flex", gap: 24, paddingLeft: 32 }}>
+          <Link href="/digest" style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 11,
+            letterSpacing: "1px",
+            color: "var(--muted)",
+            textTransform: "uppercase",
+            textDecoration: "none",
+          }}>
+            Daily Digest
+          </Link>
+          <Link href="/ai-news" style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 11,
+            letterSpacing: "1px",
+            color: "var(--accent)",
+            textTransform: "uppercase",
+            textDecoration: "none",
+          }}>
+            ✦ AI Intelligence
+          </Link>
+        </nav>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{

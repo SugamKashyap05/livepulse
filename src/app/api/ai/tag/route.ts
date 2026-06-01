@@ -33,7 +33,16 @@ Primary Topic: ${topic || "General"}
 Return as JSON: { "tags": ["tag1", "tag2", ...] }`
 
     const start = Date.now()
-    const response = await structuredChat<{ tags: string[] }>(prompt, MODELS.FAST)
+    let response: { tags: string[] }
+    try {
+      response = await structuredChat<{ tags: string[] }>(prompt, MODELS.FAST)
+    } catch (error) {
+      console.error("[AI tag unavailable]:", error)
+      return NextResponse.json(
+        { error: "AI service unavailable", fallback: true },
+        { status: 503 }
+      )
+    }
     const ms = Date.now() - start
 
     await prisma.newsArticle.update({

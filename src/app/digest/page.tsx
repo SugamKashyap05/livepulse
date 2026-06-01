@@ -1,131 +1,128 @@
 import Header from "@/components/Header"
+import DigestClient from "@/components/DigestClient"
+import { prisma } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 
-async function getDigest() {
-  // We call the API internally using the absolute URL if possible, 
-  // but since it's a server component we can just use the same logic or fetch.
-  // For simplicity and to ensure caching logic works, we'll fetch from our own API.
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-  try {
-    const res = await fetch(`${baseUrl}/api/ai/digest`, { cache: "no-store" })
-    if (!res.ok) return null
-    return await res.json()
-  } catch (e) {
-    return null
-  }
-}
-
 export default async function DigestPage() {
-  const digest = await getDigest()
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
+  const today = new Date().toISOString().slice(0, 10)
+
+  const existing = await prisma.dailyDigest.findUnique({
+    where: { date: today },
+  })
+
+  const topArticles = await prisma.newsArticle.findMany({
+    orderBy: { pubDate: "desc" },
+    take: 5,
+    select: { title: true, source: true, topic: true, link: true },
   })
 
   return (
     <>
       <Header />
-      <main style={{ 
-        maxWidth: 800, 
-        margin: "0 auto", 
-        padding: "60px 24px 100px",
-        fontFamily: "var(--font-serif)",
-      }}>
-        {/* Date / Metadata */}
-        <div style={{
-          textAlign: "center",
-          marginBottom: 48,
-        }}>
+      <main style={{ maxWidth: 800, margin: "0 auto", padding: "40px 24px" }}>
+        <div style={{ marginBottom: 32 }}>
           <div style={{
             fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 12,
+            fontSize: 10,
+            letterSpacing: "2px",
             color: "var(--accent)",
             textTransform: "uppercase",
-            letterSpacing: "3px",
-            marginBottom: 12,
+            marginBottom: 10,
           }}>
-            Daily Briefing
+            {new Date().toLocaleDateString("en-US", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
           </div>
           <h1 style={{
-            fontSize: 48,
-            fontWeight: 900,
             fontFamily: "'Playfair Display', serif",
-            margin: "0 0 16px 0",
-            letterSpacing: -1,
+            fontSize: 40,
+            fontWeight: 900,
             color: "var(--text)",
+            margin: 0,
+            lineHeight: 1.2,
           }}>
-            Today in LivePulse
+            Daily Briefing
           </h1>
-          <div style={{
+          <p style={{
             fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 13,
+            fontSize: 12,
             color: "var(--muted)",
+            marginTop: 8,
           }}>
-            {today}
-          </div>
+            AI-generated summary of today's top news
+          </p>
         </div>
 
-        {/* Separator */}
+        {/* Top headlines sidebar */}
         <div style={{
-          height: "1px",
-          width: 80,
-          background: "var(--border)",
-          margin: "0 auto 48px",
-        }} />
-
-        {/* Digest Content */}
-        {!digest ? (
-            <div style={{ textAlign: "center", color: "var(--muted)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 13 }}>
-                Preparing today's intelligence... Please refresh in a moment.
-            </div>
-        ) : (
-          <article style={{
-            fontSize: 18,
-            lineHeight: 1.8,
-            color: "var(--text)",
-            opacity: 0.9,
-          }}>
-             <div style={{
-                whiteSpace: "pre-wrap",
-                fontFamily: "'Inter', sans-serif",
-                textAlign: "justify"
-             }}>
-                {digest.content}
-             </div>
-          </article>
-        )}
-
-        {/* Footer info */}
-        <div style={{
-          marginTop: 80,
-          padding: "32px",
           background: "var(--surface)",
           border: "1px solid var(--border)",
-          borderRadius: 8,
-          textAlign: "center",
+          borderRadius: 6,
+          padding: "16px 20px",
+          marginBottom: 28,
         }}>
-            <div style={{ 
-                fontFamily: "'IBM Plex Mono', monospace", 
-                fontSize: 10, 
-                color: "var(--accent)", 
-                textTransform: "uppercase",
-                marginBottom: 8
-            }}>
-                Powered by LivePulse AI
-            </div>
-            <p style={{ 
-                margin: 0, 
-                fontSize: 13, 
-                color: "var(--muted)",
-                lineHeight: 1.6
-            }}>
-                Generated every morning using local LLM synthesis of over 30 global sources.
-                No data ever leaves your machine.
-            </p>
+          <div style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 9,
+            letterSpacing: "1.5px",
+            textTransform: "uppercase",
+            color: "var(--muted)",
+            marginBottom: 12,
+          }}>
+            Today's Top Headlines
+          </div>
+          {topArticles.map((a, i) => (
+            <a
+              key={i}
+              href={a.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "flex",
+                gap: 12,
+                padding: "8px 0",
+                borderBottom: i < topArticles.length - 1
+                  ? "1px solid var(--border)"
+                  : "none",
+                textDecoration: "none",
+                alignItems: "flex-start",
+              }}
+            >
+              <span style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: 10,
+                color: "var(--accent)",
+                minWidth: 16,
+                marginTop: 2,
+              }}>
+                {i + 1}
+              </span>
+              <div>
+                <div style={{
+                  fontSize: 13,
+                  color: "var(--text)",
+                  lineHeight: 1.4,
+                  marginBottom: 2,
+                }}>
+                  {a.title}
+                </div>
+                <div style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: 10,
+                  color: "var(--muted)",
+                }}>
+                  {a.source}
+                </div>
+              </div>
+            </a>
+          ))}
         </div>
+
+        <DigestClient initialDigest={existing?.content || null} />
       </main>
     </>
   )

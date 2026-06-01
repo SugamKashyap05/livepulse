@@ -29,7 +29,16 @@ Description: ${description || "N/A"}
 Summary:`
 
     const start = Date.now()
-    const aiResponse = await chat(prompt, MODELS.SUMMARY)
+    let aiResponse: Awaited<ReturnType<typeof chat>>
+    try {
+      aiResponse = await chat(prompt, MODELS.SUMMARY)
+    } catch (error) {
+      console.error("[AI summarize unavailable]:", error)
+      return NextResponse.json(
+        { error: "AI service unavailable", fallback: true },
+        { status: 503 }
+      )
+    }
     const ms = Date.now() - start
 
     await prisma.newsArticle.update({

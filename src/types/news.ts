@@ -7,6 +7,9 @@ export interface NewsItem {
   source: string
   topic: string
   image?: string
+  summary?: string
+  sentiment?: string
+  aiTags?: string
 }
 
 export interface FeedSource {
