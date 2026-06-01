@@ -19,6 +19,8 @@ type DraftArticle = {
   image: string | null
   createdAt: string
   published: boolean
+  factScore: number | null
+  biasAnalysis: string | null
 }
 
 export default function NewsroomClient({ initialActivity }: { initialActivity: Activity[] }) {
@@ -26,6 +28,7 @@ export default function NewsroomClient({ initialActivity }: { initialActivity: A
   const [drafts, setDrafts] = useState<DraftArticle[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [previewId, setPreviewId] = useState<string | null>(null)
+  const [publishedMsg, setPublishedMsg] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -93,6 +96,8 @@ export default function NewsroomClient({ initialActivity }: { initialActivity: A
         return
       }
       setPreviewId(null)
+      setPublishedMsg("Article published to /ai-news")
+      setTimeout(() => setPublishedMsg(null), 3000)
       fetchDrafts()
     } catch (e) { console.error(e) }
   }
@@ -116,6 +121,22 @@ export default function NewsroomClient({ initialActivity }: { initialActivity: A
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 350px", gap: 32, height: "calc(100vh - 150px)" }}>
+      {publishedMsg && (
+        <div style={{
+          position: "fixed",
+          bottom: 24,
+          right: 24,
+          background: "var(--accent)",
+          color: "#000",
+          padding: "8px 16px",
+          fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: 11,
+          zIndex: 9999,
+        }}>
+          {publishedMsg}
+        </div>
+      )}
+
       {/* Main Terminal & Preview Area */}
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
         
@@ -270,6 +291,27 @@ export default function NewsroomClient({ initialActivity }: { initialActivity: A
             }}>
               {selectedDraft.description}
             </div>
+
+            {selectedDraft.factScore !== null && (
+              <div style={{
+                marginTop: 12,
+                padding: "8px 12px",
+                background: "var(--surface2)",
+                border: "1px solid var(--border)",
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: 11,
+                marginBottom: 16,
+              }}>
+                <div style={{ color: "var(--accent)", marginBottom: 4 }}>
+                  FACT SCORE: {selectedDraft.factScore}/100
+                </div>
+                {selectedDraft.biasAnalysis && (
+                  <div style={{ color: "var(--muted)" }}>
+                    BIAS: {selectedDraft.biasAnalysis}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <button 

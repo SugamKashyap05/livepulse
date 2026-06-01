@@ -17,7 +17,13 @@ export async function POST(request: Request) {
           ? { aiTags: null }
           : task === "summarize"
           ? { summary: null }
-          : { scored: false },
+          : {
+              OR: [
+                { scored: false },
+                { aiTags: null },
+                { summary: null },
+              ],
+            },
       take: limit,
       select: {
         id: true,

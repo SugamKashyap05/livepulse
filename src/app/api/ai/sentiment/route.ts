@@ -29,10 +29,23 @@ Description: ${description || ""}
 Return as JSON: { "sentiment": "positive" | "neutral" | "negative", "confidence": 0.0-1.0 }`
 
     const start = Date.now()
-    const response = await structuredChat<{ sentiment: string, confidence: number }>(prompt, MODELS.FAST)
+    let response: { sentiment: string, confidence: number }
+    try {
+      response = await structuredChat<{ sentiment: string, confidence: number }>(prompt, MODELS.FAST)
+    } catch (error) {
+      console.error("[AI sentiment unavailable]:", error)
+      return NextResponse.json(
+        { error: "AI service unavailable", fallback: true },
+        { status: 503 }
+      )
+    }
     const ms = Date.now() - start
 
-    const sentiment = response.sentiment.toLowerCase()
+    const VALID_SENTIMENTS = ["positive", "neutral", "negative"]
+    const normalizedSentiment = response.sentiment?.toLowerCase()
+    const sentiment = normalizedSentiment && VALID_SENTIMENTS.includes(normalizedSentiment)
+      ? normalizedSentiment
+      : "neutral"
 
     await prisma.newsArticle.update({
       where: { id },

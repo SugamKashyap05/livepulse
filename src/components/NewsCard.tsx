@@ -42,16 +42,17 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
   const [sentiment, setSentiment] = useState<string | null>(item.sentiment || null)
   const [loadingSummary, setLoadingSummary] = useState(false)
   const [loadingSentiment, setLoadingSentiment] = useState(false)
+  const [loadingTags, setLoadingTags] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
 
-  const aiTags: string[] = (() => {
+  const [aiTags, setAiTags] = useState<string[]>(() => {
     try {
       return item.aiTags ? JSON.parse(item.aiTags) : []
     } catch {
       return []
     }
-  })()
+  })
 
   async function handleSummarize(e: React.MouseEvent) {
     e.preventDefault()
@@ -118,6 +119,40 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
       setAiError("AI service is unavailable right now.")
     } finally {
       setLoadingSentiment(false)
+    }
+  }
+
+  async function handleGenerateTags(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (aiTags.length > 0 || loadingTags) return
+
+    setLoadingTags(true)
+    setAiError(null)
+    try {
+      const res = await fetch("/api/ai/tag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          topic: item.topic,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setAiError("AI service is unavailable right now.")
+        return
+      }
+      if (Array.isArray(data.tags)) {
+        setAiTags(data.tags)
+      }
+    } catch {
+      setAiError("AI service is unavailable right now.")
+    } finally {
+      setLoadingTags(false)
     }
   }
 
@@ -403,6 +438,27 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
           </span>
 
           <div style={{ display: "flex", gap: 6 }}>
+            {aiTags.length === 0 && (
+              <button
+                onClick={handleGenerateTags}
+                disabled={loadingTags}
+                title="Generate AI tags"
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: 9,
+                  letterSpacing: "0.5px",
+                  padding: "3px 8px",
+                  background: "transparent",
+                  color: "var(--muted)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 2,
+                  cursor: loadingTags ? "not-allowed" : "pointer",
+                }}
+              >
+                {loadingTags ? "..." : "tags"}
+              </button>
+            )}
+
             <button
               onClick={handleSentiment}
               disabled={loadingSentiment || !!sentiment}

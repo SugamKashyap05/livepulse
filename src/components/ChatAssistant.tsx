@@ -27,47 +27,40 @@ export default function ChatAssistant() {
     if (!input.trim() || isTyping) return
 
     const userMsg = input
+    const MAX_HISTORY = 20
+    const trimmedHistory = messages.slice(-MAX_HISTORY)
+    const nextMessages: Message[] = [
+      ...trimmedHistory,
+      { role: "user", content: userMsg },
+    ]
     setInput("")
-    setMessages(prev => [...prev, { role: "user", content: userMsg }])
+    setMessages(nextMessages)
     setIsTyping(true)
-
-    // Placeholder for assistant response (will stream)
-    setMessages(prev => [...prev, { role: "assistant", content: "" }])
 
     try {
       const response = await fetch("/api/ai/chat", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          messages: [...messages, { role: "user", content: userMsg }]
+          messages: nextMessages
         }),
       })
 
-      if (!response.ok) throw new Error("Chat failed")
-
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error("No reader")
-
-      const decoder = new TextDecoder()
-      let assistantText = ""
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        const token = decoder.decode(value)
-        assistantText += token
-        
-        setMessages(prev => {
-          const last = prev[prev.length - 1]
-          if (last.role === "assistant") {
-            return [...prev.slice(0, -1), { role: "assistant", content: assistantText }]
-          }
-          return prev
-        })
+      const data = await response.json()
+      if (!response.ok || data.error) {
+        throw new Error(data.error || "Chat failed")
       }
+
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: data.reply || "No response available." },
+      ])
     } catch (err) {
       console.error(err)
-      setMessages(prev => [...prev.slice(0, -1), { role: "assistant", content: "Sorry, I'm having trouble connecting to my brain. Is Ollama running?" }])
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: "AI service is unavailable right now. Try again when Ollama is running." },
+      ])
     } finally {
       setIsTyping(false)
     }
@@ -185,6 +178,17 @@ export default function ChatAssistant() {
                 {m.content}
               </div>
             ))}
+            {isTyping && (
+              <div style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: 11,
+                color: "var(--muted)",
+                padding: "8px 0",
+                opacity: 0.7,
+              }}>
+                ▋ thinking...
+              </div>
+            )}
           </div>
 
           {/* Input Area */}

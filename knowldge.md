@@ -1,6 +1,6 @@
 # LivePulse Project Knowledge
 
-Last updated: 2026-05-31
+Last updated: 2026-06-01
 
 This file is the working project memory for LivePulse. Update it after every code edit so future work can start here before re-reading the full repository.
 
@@ -47,17 +47,13 @@ Known variable names in `.env`:
 - `DATABASE_URL`
 - `NEXT_PUBLIC_BASE_URL`
 - `OLLAMA_MODEL`
+- `OLLAMA_HOST`
 - `OLLAMA_DIGEST_MODEL`
 - `OLLAMA_SUMMARY_MODEL`
 - `OLLAMA_CHAT_MODEL`
+- `OLLAMA_MANAGER_MODEL`
 - `OLLAMA_FAST_MODEL`
 - `ADMIN_SECRET`
-
-Code also references:
-
-- `OLLAMA_HOST`
-- `OLLAMA_MODEL_CHAT`
-- `OLLAMA_MODEL_MANAGER`
 - `CRON_SECRET`
 
 Do not write secret values into this file.
@@ -303,7 +299,6 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
 - PostgreSQL migration is still pending. `DATABASE_URL` currently points to local SQLite; a real Neon/PostgreSQL connection string is required before changing `prisma/schema.prisma` provider and running Prisma migration commands.
 - `ChatWidget` still exists in `src/components/ChatWidget.tsx`, but the home page no longer renders it. `ChatAssistant` is the active global chat UI and consumes JSON from `/api/ai/chat`.
 - Several files contain mojibake in comments or UI text, such as `â€”`, `âœ¦`, `Â·`, `â—†`, and similar. This likely came from an encoding mismatch.
-- `NewsCard` mutates DOM with `wrapper.innerHTML` inside image `onError`, which bypasses React and can be fragile.
 - AI routes now return structured fallback responses when Ollama is unavailable, but batch/agentic routes may still need broader graceful-degradation work.
 - ESLint currently fails on existing debt in files such as `src/app/admin/newsroom/page.tsx`, `src/app/ai-news/page.tsx`, `src/app/digest/page.tsx`, `src/components/ChatWidget.tsx`, `src/components/admin/AdminSidebar.tsx`, `src/lib/fetchFeeds.ts`, and `src/lib/ollama.ts`.
   - `src/components/admin/AdminSidebar.tsx` no longer has the set-state-in-effect error as of the publishing pipeline patch.
@@ -331,7 +326,7 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
 - `npm run lint` failed on existing lint debt listed in Known Issues.
 - Security patch update:
   - Added `CRON_SECRET` to local `.env`.
-  - Added local `.env` entries for `OLLAMA_HOST`, `OLLAMA_MODEL_CHAT`, and `OLLAMA_MODEL_MANAGER` using an installed `llama3.2` model.
+  - Added local `.env` entries for `OLLAMA_HOST`, `OLLAMA_CHAT_MODEL`, and `OLLAMA_MANAGER_MODEL`.
   - Hardened the admin cookie from `sameSite=lax` to `sameSite=strict`.
   - Changed `src/proxy.ts` to default export.
   - Added shared `src/lib/adminAuth.ts`.
@@ -372,6 +367,17 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
   - Browser check showed script-shaped `source` rendered as literal text and `window.__lp_xss` stayed false.
   - `/admin/newsroom` browser smoke showed heading and pending publication section with no console errors after a poll interval.
   - `npm run lint` still fails on older lint debt, but the AdminSidebar set-state-in-effect error is gone.
+- AI feature completion patch:
+  - `/api/ai/chat` now uses `MODELS.CHAT`; `/api/ai/manager` now uses `MODELS.MANAGER`.
+  - Local `.env` now uses `OLLAMA_CHAT_MODEL` and `OLLAMA_MANAGER_MODEL`; old `OLLAMA_MODEL_CHAT` and `OLLAMA_MODEL_MANAGER` names are no longer used.
+  - `/ai-news` passes `aiGenerated: true` into `NewsCard`, so published Scout articles show the AI badge.
+  - `NewsroomClient` draft previews include `factScore` and `biasAnalysis` when present and show a short publish confirmation toast.
+  - `NewsCard` has a `tags` button that calls `/api/ai/tag` and updates tag badges without a reload.
+  - Batch `task="all"` selects articles missing sentiment score, tags, or summary.
+  - Fact-check scores are clamped to `0..100`; unexpected sentiment values store as `neutral`.
+  - `ChatAssistant` displays a typing indicator and sends only the last 20 prior messages plus the new user message.
+  - Scout generation now includes the `India` topic when context articles exist.
+  - Verification: `npx tsc --noEmit` passed; `npm run lint` still fails on older lint debt, now at 11 errors and 5 warnings.
 
 ## How To Keep This File Updated
 

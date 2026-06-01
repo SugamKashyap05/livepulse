@@ -1,109 +1,60 @@
-import { MODELS } from "@/lib/ollama"
+import { NextResponse } from "next/server"
+import { prisma } from "@/lib/db"
+import { MODELS, ollamaChat, logAiAction, OllamaMessage } from "@/lib/ollama"
 
-export const dynamic = "force-dynamic"
-const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434"
+export const maxDuration = 60
 
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { messages } = await req.json()
+    const { messages, topic } = await request.json()
 
-    if (!messages || !Array.isArray(messages)) {
-      return new Response("Invalid request", { status: 400 })
-    }
-
-    // 1. Fetch Latest News Context (RAG)
     const recentArticles = await prisma.newsArticle.findMany({
+      where: topic && topic !== "all"
+        ? { topic: { equals: topic } }
+        : {},
       orderBy: { pubDate: "desc" },
       take: 20,
-      select: { title: true, source: true, description: true, topic: true }
+      select: { title: true, source: true, topic: true, description: true, link: true },
     })
 
-    const context = recentArticles.map(a => `[${a.source}] (${a.topic}) ${a.title}: ${a.description}`).join("\n\n")
+    const context = recentArticles
+      .map((a, i) => `${i + 1}. [${a.topic}] ${a.title} — ${a.source}${a.description ? `\n   ${a.description.slice(0, 100)}` : ""}`)
+      .join("\n")
 
-    const systemPrompt = `You are the LivePulse News Assistant. You help users navigate current events.
-    Use the following news articles from our database to answer the user's questions. 
-    If the information is not in the context, say you don't have that specific data yet.
-    ALWAYS cite the source in square brackets like [BBC] or [Reuters].
-    Be concise, helpful, and objective.
+    const systemPrompt = `You are a knowledgeable news assistant for LivePulse, a real-time news aggregator.
+You have access to the latest articles in the database. Answer questions about current news clearly and concisely.
+Always cite the source when referencing a specific article.
+If asked about something not in the articles, say so honestly.
 
-    Current News Context:
-    ${context}`
+Current news context (latest ${recentArticles.length} articles):
+${context}`
 
-    // 2. Prepare request for Ollama
-    const ollamaMessages = [
-        { role: "system", content: systemPrompt },
-        ...messages
+    const chatMessages: OllamaMessage[] = [
+      { role: "system", content: systemPrompt },
+      ...messages,
     ]
 
-    const ollamaResponse = await fetch(`${OLLAMA_HOST}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        model: MODELS.CHAT, 
-        messages: ollamaMessages,
-        stream: true 
-      }),
-    })
-
-    if (!ollamaResponse.ok) {
-        throw new Error("Ollama chat failed")
+    const model = MODELS.CHAT
+    const start = Date.now()
+    let result: Awaited<ReturnType<typeof ollamaChat>>
+    try {
+      result = await ollamaChat(model, chatMessages, {
+        temperature: 0.6,
+        maxTokens: 512,
+      })
+    } catch (error) {
+      console.error("[AI chat unavailable]:", error)
+      return NextResponse.json(
+        { error: "AI service unavailable", fallback: true },
+        { status: 503 }
+      )
     }
+    const ms = Date.now() - start
 
-    const encoder = new TextEncoder()
-    const decoder = new TextDecoder()
+    await logAiAction("chat", model, ms, result.tokens)
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        const reader = ollamaResponse.body?.getReader()
-        if (!reader) {
-          controller.close()
-          return
-        }
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-
-            const chunk = decoder.decode(value)
-            const lines = chunk.split("\n")
-            
-            for (const line of lines) {
-              if (!line.trim()) continue
-              try {
-                const json = JSON.parse(line)
-                if (json.message?.content) {
-                  controller.enqueue(encoder.encode(json.message.content))
-                }
-                if (json.done) {
-                    // Log the chat action occasionally or for tokens
-                }
-              } catch (e) {
-                // Ignore parsing errors
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Chat Stream reading error:", err)
-        } finally {
-          controller.close()
-        }
-      },
-    })
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-      },
-    })
-
+    return NextResponse.json({ reply: result.content, model })
   } catch (error) {
-    console.error("[Chat API Error]:", error)
-    return new Response(JSON.stringify({ error: "Chat failed" }), { 
-      status: 500,
-      headers: { "Content-Type": "application/json" }
-    })
+    return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }
