@@ -101,7 +101,9 @@ export default function AdminSidebar() {
       {/* Navigation */}
       <nav style={{ padding: "12px 6px", flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
         {NAV.map((item) => {
-          const isActive = pathname === item.href
+          const isActive = item.href === "/admin"
+            ? pathname === item.href
+            : pathname === item.href || pathname.startsWith(item.href + "/")
           return (
             <Link
               key={item.href}

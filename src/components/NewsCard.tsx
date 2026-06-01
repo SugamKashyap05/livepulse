@@ -31,6 +31,7 @@ export interface NewsItemWithAI extends NewsItem {
   summary?: string
   sentiment?: string
   aiTags?: string
+  aiGenerated?: boolean
 }
 
 export default function NewsCard({ item }: { item: NewsItemWithAI }) {
@@ -42,6 +43,7 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
   const [loadingSummary, setLoadingSummary] = useState(false)
   const [loadingSentiment, setLoadingSentiment] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   const aiTags: string[] = (() => {
     try {
@@ -61,6 +63,7 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
     }
 
     setLoadingSummary(true)
+    setAiError(null)
     try {
       const res = await fetch("/api/ai/summarize", {
         method: "POST",
@@ -72,10 +75,16 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
         }),
       })
       const data = await res.json()
+      if (!res.ok || data.error) {
+        setAiError("AI service is unavailable right now.")
+        return
+      }
       if (data.summary) {
         setSummary(data.summary)
         setShowSummary(true)
       }
+    } catch {
+      setAiError("AI service is unavailable right now.")
     } finally {
       setLoadingSummary(false)
     }
@@ -88,6 +97,7 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
     if (sentiment) return
 
     setLoadingSentiment(true)
+    setAiError(null)
     try {
       const res = await fetch("/api/ai/sentiment", {
         method: "POST",
@@ -99,7 +109,13 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
         }),
       })
       const data = await res.json()
+      if (!res.ok || data.error) {
+        setAiError("AI service is unavailable right now.")
+        return
+      }
       if (data.sentiment) setSentiment(data.sentiment)
+    } catch {
+      setAiError("AI service is unavailable right now.")
     } finally {
       setLoadingSentiment(false)
     }
@@ -118,6 +134,8 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
         borderRadius: 6,
         overflow: "hidden",
         transition: "border-color 0.2s, transform 0.15s",
+        position: "relative",
+        borderTop: item.aiGenerated ? `2px solid var(--accent)` : "1px solid var(--border)",
       }}
       onMouseEnter={e => {
         const el = e.currentTarget as HTMLElement
@@ -150,7 +168,22 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
                 wrapper.style.alignItems = "center"
                 wrapper.style.justifyContent = "center"
                 wrapper.style.height = "120px"
-                wrapper.innerHTML = `<span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1px;color:${color};text-transform:uppercase;opacity:0.7">${item.source}</span>`
+                // Safe DOM construction: no innerHTML, no XSS.
+                const existing = wrapper.querySelector("[data-src-label]")
+                if (!existing) {
+                  const span = document.createElement("span")
+                  span.setAttribute("data-src-label", "true")
+                  span.style.cssText = [
+                    "font-family:'IBM Plex Mono',monospace",
+                    "font-size:11px",
+                    "letter-spacing:1px",
+                    `color:${color}`,
+                    "text-transform:uppercase",
+                    "opacity:0.7",
+                  ].join(";")
+                  span.textContent = item.source
+                  wrapper.appendChild(span)
+                }
               }
             }}
           />
@@ -183,6 +216,27 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
             {item.source}
           </span>
         </a>
+      )}
+
+      {/* AI Badge for generated content */}
+      {item.aiGenerated && (
+        <div style={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          background: "rgba(74,240,196,0.9)",
+          color: "#000",
+          fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: 8,
+          fontWeight: 800,
+          padding: "2px 6px",
+          borderRadius: 2,
+          letterSpacing: "1px",
+          zIndex: 10,
+          boxShadow: "0 4px 10px rgba(0,0,0,0.3)"
+        }}>
+          AI GENERATED
+        </div>
       )}
 
       <div style={{
@@ -318,6 +372,16 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
                 {tag}
               </span>
             ))}
+          </div>
+        )}
+
+        {aiError && (
+          <div style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 10,
+            color: "var(--red)",
+          }}>
+            {aiError}
           </div>
         )}
 

@@ -2,8 +2,9 @@ import { prisma } from "@/lib/db"
 import { fetchAllFeeds } from "@/lib/fetchFeeds"
 import Header from "@/components/Header"
 import NewsCard from "@/components/NewsCard"
-import { ALL_TOPICS } from "@/lib/sources"
+import { ALL_TOPICS, AreaTopic } from "@/lib/sources"
 import { NewsItem } from "@/types/news"
+
 import { formatDistanceToNow } from "date-fns"
 
 export const revalidate = 300
@@ -12,11 +13,12 @@ export const dynamic = "force-dynamic"
 async function getNews(): Promise<NewsItem[]> {
   try {
     const articles = await prisma.newsArticle.findMany({
+      where: { published: true },
       orderBy: { pubDate: "desc" },
       take: 200,
     })
 
-    const formattedArticles = articles.map((a: any) => ({
+    const formattedArticles = articles.map((a) => ({
       id: a.id,
       title: a.title,
       description: a.description || "",
@@ -77,7 +79,7 @@ export default async function HomePage() {
           flexWrap: "wrap",
           marginBottom: 28,
         }}>
-          {ALL_TOPICS.map((topic: any) => (
+          {ALL_TOPICS.map((topic: AreaTopic) => (
             <a
               key={topic.slug}
               href={topic.slug === "all" ? "/" : `/topic/${topic.slug}`}
@@ -104,12 +106,12 @@ export default async function HomePage() {
           gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
           gap: 16,
         }}>
-          {news.map((item: any) => (
+          {news.map((item: NewsItem) => (
             <NewsCard key={item.id} item={item} />
           ))}
         </div>
-
         {news.length === 0 && (
+
           <div style={{
             textAlign: "center",
             padding: "80px 0",

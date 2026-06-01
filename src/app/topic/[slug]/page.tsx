@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/db"
-import { ALL_TOPICS } from "@/lib/sources"
+import { ALL_TOPICS, AreaTopic } from "@/lib/sources"
 import Header from "@/components/Header"
 import NewsCard from "@/components/NewsCard"
 import { NewsItem } from "@/types/news"
 import { formatDistanceToNow } from "date-fns"
+import { notFound } from "next/navigation"
 
 export const dynamic = "force-dynamic"
+
 
 export default async function TopicPage({
   params,
@@ -13,15 +15,19 @@ export default async function TopicPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const topic = ALL_TOPICS.find((t: any) => t.slug === slug)
+  const topic = ALL_TOPICS.find((t) => t.slug === slug)
+  if (!topic) notFound()
 
+  const isAll = slug === "all"
   const articles = await prisma.newsArticle.findMany({
-    where: { slug },
+    where: isAll
+      ? { published: true }
+      : { slug, published: true },
     orderBy: { pubDate: "desc" },
     take: 100,
   })
 
-  const news: NewsItem[] = articles.map((a: any) => ({
+  const news: NewsItem[] = articles.map((a) => ({
     id: a.id,
     title: a.title,
     description: a.description || "",
@@ -55,7 +61,7 @@ export default async function TopicPage({
           flexWrap: "wrap",
           marginBottom: 28,
         }}>
-          {ALL_TOPICS.map((t: any) => (
+          {ALL_TOPICS.map((t: AreaTopic) => (
             <a
               key={t.slug}
               href={t.slug === "all" ? "/" : `/topic/${t.slug}`}

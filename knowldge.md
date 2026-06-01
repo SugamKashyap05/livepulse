@@ -149,14 +149,16 @@ Sources:
 
 - `/`
   - File: `src/app/page.tsx`.
-  - Dynamic page; reads latest 200 `NewsArticle` rows from Prisma.
+  - Dynamic page; reads latest 200 `NewsArticle` rows from Prisma with `where: { published: true }`.
   - If DB is empty or read fails, fetches live RSS directly.
   - Renders `Header`, topic tabs, article grid, and `NewsCard`.
 - `/topic/[slug]`
   - File: `src/app/topic/[slug]/page.tsx`.
   - Dynamic page.
   - Uses Next 16-style `params: Promise<{ slug: string }>` and awaits it.
-  - Reads up to 100 articles matching `slug`.
+  - Calls `notFound()` for invalid slugs.
+  - `/topic/all` reads published articles across all slugs.
+  - Other topic pages read up to 100 articles matching `slug` and `published: true`.
 - `/digest`
   - File: `src/app/digest/page.tsx`.
   - Shows existing `DailyDigest` for today's date plus top 5 headlines.
@@ -226,6 +228,7 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
   - Shows AI coverage counts, recent logs, recent digests, and model names.
 - `/admin/newsroom`
   - Shows recent `AgentActivity` and controls agentic newsroom processing.
+  - Client polls `/api/ai/newsroom/activity` and `/api/admin/ai/drafts` every 15 seconds with an `AbortController`.
 
 ## API Routes
 
@@ -253,6 +256,14 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
 - `DELETE /api/admin/purge`
   - Query param: `days`, default `3`.
   - Independently checks `isAdminAuthorized(request)` before deleting.
+- `GET /api/admin/ai/drafts`
+  - Admin-only replacement for old `/api/ai/articles/drafts`.
+  - Returns `aiGenerated: true` and `published: false` articles.
+- `POST /api/admin/ai/publish`
+  - Admin-only replacement for old `/api/ai/articles/publish`.
+  - Body: `id`; sets `published: true`.
+- `POST /api/admin/ai/unpublish`
+  - Body: `id`; sets `published: false`.
 - `POST /api/ai/summarize`
   - Body: `id`, `title`, `description`.
   - Caches summary on `NewsArticle.summary`.
@@ -283,10 +294,9 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
 - `GET /api/ai/newsroom/activity`
   - Returns latest 20 agent activities.
 - `GET /api/ai/articles/drafts`
-  - Returns unpublished AI-generated drafts.
+  - Removed. Use `/api/admin/ai/drafts`.
 - `POST /api/ai/articles/publish`
-  - Body: `id`.
-  - Sets `published: true`.
+  - Removed. Use `/api/admin/ai/publish`.
 
 ## Known Issues / Sharp Edges
 
@@ -296,6 +306,7 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
 - `NewsCard` mutates DOM with `wrapper.innerHTML` inside image `onError`, which bypasses React and can be fragile.
 - AI routes now return structured fallback responses when Ollama is unavailable, but batch/agentic routes may still need broader graceful-degradation work.
 - ESLint currently fails on existing debt in files such as `src/app/admin/newsroom/page.tsx`, `src/app/ai-news/page.tsx`, `src/app/digest/page.tsx`, `src/components/ChatWidget.tsx`, `src/components/admin/AdminSidebar.tsx`, `src/lib/fetchFeeds.ts`, and `src/lib/ollama.ts`.
+  - `src/components/admin/AdminSidebar.tsx` no longer has the set-state-in-effect error as of the publishing pipeline patch.
 
 ## Development Conventions Seen In Repo
 
@@ -341,6 +352,26 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
   - Authenticated `GET /api/admin/ping?url=https://feeds.bbci.co.uk/news/world/rss.xml` returned `200`.
   - Authenticated `DELETE /api/admin/articles` without target or `confirm=true` returned `400`.
   - Browser smoke check confirmed `/admin` redirects to login and the login heading is visible.
+
+2026-06-01:
+
+- Publishing pipeline patch:
+  - Home page filters to `published: true`, preventing draft leaks.
+  - AI drafts/publish routes moved under `/api/admin/ai/*` and independently check `isAdminAuthorized`.
+  - Added `/api/admin/ai/unpublish`.
+  - Newsroom client uses admin drafts/publish/unpublish paths and polls every 15 seconds with abort cleanup.
+  - Topic pages validate slugs with `notFound()` and filter `published: true`; `/topic/all` now works.
+  - NewsCard image fallback replaced `innerHTML` with safe `textContent` DOM construction.
+  - AdminSidebar still has no `useEffect` block; active matching now handles nested admin paths without marking Dashboard active for every page.
+- Verification:
+  - `npx tsc --noEmit` passed.
+  - Incognito `/api/admin/ai/drafts`, `/publish`, and `/unpublish` returned 401.
+  - `/topic/all` and `/topic/technology` returned 200.
+  - `/topic/fakeSlug` returned 404.
+  - Temporary unpublished AI article was hidden from `/`, appeared in admin drafts, published with 200, disappeared from drafts, appeared on `/`, unpublished with 200, returned to drafts, then was deleted from the DB.
+  - Browser check showed script-shaped `source` rendered as literal text and `window.__lp_xss` stayed false.
+  - `/admin/newsroom` browser smoke showed heading and pending publication section with no console errors after a poll interval.
+  - `npm run lint` still fails on older lint debt, but the AdminSidebar set-state-in-effect error is gone.
 
 ## How To Keep This File Updated
 
