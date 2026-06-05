@@ -10,6 +10,9 @@ export interface NewsItem {
   summary?: string
   sentiment?: string
   aiTags?: string
+  aiGenerated?: boolean
+  isRead?: boolean
+  isBookmarked?: boolean
 }
 
 export interface FeedSource {
@@ -17,4 +20,7 @@ export interface FeedSource {
   url: string
   topic: string
   slug: string
+  region?: string
+  enabled?: boolean
+  priority?: number
 }

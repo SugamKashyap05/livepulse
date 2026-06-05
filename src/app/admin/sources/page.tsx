@@ -10,23 +10,37 @@ export default async function SourcesPage() {
     _count: { id: true },
   })
 
-  const latest = await prisma.newsArticle.groupBy({
-    by: ["source"],
-    _max: { fetchedAt: true },
+  const countMap = Object.fromEntries(
+    counts.map((count) => [count.source, count._count.id])
+  )
+
+  let dbSources = await prisma.feedSource.findMany({
+    orderBy: [{ topic: "asc" }, { priority: "desc" }, { name: "asc" }],
   })
 
-  const countMap = Object.fromEntries(
-    counts.map((c) => [c.source, c._count.id])
-  )
-  const latestMap = Object.fromEntries(
-    latest.map((l) => [l.source, l._max.fetchedAt])
-  )
+  if (dbSources.length === 0) {
+    dbSources = FEED_SOURCES.map((source, index) => ({
+      id: `fallback-${index}`,
+      name: source.name,
+      url: source.url,
+      topic: source.topic,
+      slug: source.slug,
+      region: source.region || "global",
+      enabled: true,
+      priority: source.priority || 5,
+      lastFetched: null,
+      lastStatus: null,
+      failCount: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }))
+  }
 
-  const sources = FEED_SOURCES.map((s) => ({
-    ...s,
-    articleCount: countMap[s.name] || 0,
-    lastFetched: latestMap[s.name]
-      ? new Date(latestMap[s.name]!).toLocaleString()
+  const sources = dbSources.map((source) => ({
+    ...source,
+    articleCount: countMap[source.name] || 0,
+    lastFetchedLabel: source.lastFetched
+      ? new Date(source.lastFetched).toLocaleString()
       : "Never",
   }))
 
@@ -48,7 +62,7 @@ export default async function SourcesPage() {
           color: "var(--muted)",
           marginTop: 6,
         }}>
-          {FEED_SOURCES.length} RSS feeds configured
+          {sources.length} RSS feeds configured
         </p>
       </div>
       <SourcesClient sources={sources} />

@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/db"
-import { FEED_SOURCES } from "@/lib/sources"
 import AdminSync from "@/components/admin/AdminSync"
 import AiBatchClient from "@/components/admin/AiBatchClient"
 
@@ -36,7 +35,11 @@ async function getStats() {
     orderBy: { _count: { id: "desc" } },
   })
 
-  return { total, todayCount, oldest, newest, byTopic, bySource }
+  const activeSources = await prisma.feedSource.count({
+    where: { enabled: true },
+  })
+
+  return { total, todayCount, oldest, newest, byTopic, bySource, activeSources }
 }
 
 export default async function AdminDashboard() {
@@ -79,7 +82,7 @@ export default async function AdminDashboard() {
         {[
           { label: "Total Articles", value: stats.total, color: "var(--accent)" },
           { label: "Added Today", value: stats.todayCount, color: "#6c8fff" },
-          { label: "Active Sources", value: FEED_SOURCES.length, color: "#f5c542" },
+          { label: "Active Sources", value: stats.activeSources, color: "#f5c542" },
           { label: "Topics Covered", value: stats.byTopic.length, color: "#a78bfa" },
         ].map((stat) => (
           <div

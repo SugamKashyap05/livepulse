@@ -1,5 +1,6 @@
 "use client"
 
+import { usePathname } from "next/navigation"
 import { useState, useRef, useEffect } from "react"
 
 interface Message {
@@ -8,6 +9,7 @@ interface Message {
 }
 
 export default function ChatAssistant() {
+  const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: "Hi! I'm your LivePulse AI. Ask me anything about today's news." }
@@ -15,6 +17,9 @@ export default function ChatAssistant() {
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const currentTopic = pathname.startsWith("/topic/")
+    ? pathname.split("/topic/")[1].split("/")[0]
+    : "all"
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -42,7 +47,8 @@ export default function ChatAssistant() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          messages: nextMessages
+          messages: nextMessages,
+          topic: currentTopic,
         }),
       })
 

@@ -1,98 +1,105 @@
-import { prisma } from "@/lib/db"
-import { ALL_TOPICS, AreaTopic } from "@/lib/sources"
-import Header from "@/components/Header"
-import NewsCard from "@/components/NewsCard"
-import { NewsItem } from "@/types/news"
-import { formatDistanceToNow } from "date-fns"
+import Link from "next/link"
 import { notFound } from "next/navigation"
+import ArticleFeed from "@/components/ArticleFeed"
+import Header from "@/components/Header"
+import TopicTabs from "@/components/TopicTabs"
+import { getCurrentUserId, isNeonAuthConfigured } from "@/lib/auth"
+import { getPaginatedFeed } from "@/lib/paginatedFeed"
+import { ALL_TOPICS } from "@/lib/sources"
 
 export const dynamic = "force-dynamic"
 
+function normalizeSentiment(value?: string): string | null {
+  return value && ["positive", "neutral", "negative"].includes(value)
+    ? value
+    : null
+}
 
 export default async function TopicPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>
+  searchParams: Promise<{ sentiment?: string }>
 }) {
   const { slug } = await params
-  const topic = ALL_TOPICS.find((t) => t.slug === slug)
+  const { sentiment: sentimentParam } = await searchParams
+  const sentiment = normalizeSentiment(sentimentParam)
+  const topic = ALL_TOPICS.find((item) => item.slug === slug)
   if (!topic) notFound()
 
-  const isAll = slug === "all"
-  const articles = await prisma.newsArticle.findMany({
-    where: isAll
-      ? { published: true }
-      : { slug, published: true },
-    orderBy: { pubDate: "desc" },
-    take: 100,
+  const userId = await getCurrentUserId()
+  const registrationRequired = isNeonAuthConfigured() && !userId
+  const feed = await getPaginatedFeed({
+    scope: "topic",
+    userId,
+    topicSlug: slug,
+    sentiment,
   })
-
-  const news: NewsItem[] = articles.map((a) => ({
-    id: a.id,
-    title: a.title,
-    description: a.description || "",
-    link: a.link,
-    pubDate: formatDistanceToNow(new Date(a.pubDate), { addSuffix: true }),
-    source: a.source,
-    topic: a.topic,
-    image: a.image || undefined,
-    summary: a.summary || undefined,
-    sentiment: a.sentiment || undefined,
-    aiTags: a.aiTags || undefined,
-  }))
 
   return (
     <>
       <Header />
       <main style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 24px" }}>
-
         <div style={{
           marginBottom: 24,
           fontFamily: "'IBM Plex Mono', monospace",
           fontSize: 11,
           color: "var(--accent)",
         }}>
-          ◆ {topic?.label || slug} — {news.length} articles
+          {topic.label} - {feed.articles.length} articles loaded
         </div>
 
-        <div style={{
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          marginBottom: 28,
-        }}>
-          {ALL_TOPICS.map((t: AreaTopic) => (
-            <a
-              key={t.slug}
-              href={t.slug === "all" ? "/" : `/topic/${t.slug}`}
-              style={{
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 11,
-                letterSpacing: "1px",
-                textTransform: "uppercase",
-                padding: "6px 14px",
-                border: "1px solid var(--border2)",
-                borderRadius: 2,
-                color: t.slug === slug ? "var(--accent)" : "var(--muted)",
-                borderColor: t.slug === slug ? "var(--accent)" : "var(--border2)",
-                textDecoration: "none",
-              }}
-            >
-              {t.label}
-            </a>
-          ))}
-        </div>
-
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-          gap: 16,
-        }}>
-          {news.map((item: NewsItem) => (
-            <NewsCard key={item.id} item={item} />
-          ))}
-        </div>
+        <TopicTabs activeSlug={slug} />
+        <SentimentFilters sentiment={sentiment} basePath={`/topic/${slug}`} />
+        <ArticleFeed
+          initialArticles={feed.articles}
+          initialCursor={feed.nextCursor}
+          initialHasMore={feed.hasMore}
+          scope="topic"
+          topic={slug}
+          sentiment={sentiment}
+          registrationRequired={registrationRequired}
+        />
       </main>
     </>
+  )
+}
+
+function SentimentFilters({
+  sentiment,
+  basePath,
+}: {
+  sentiment: string | null
+  basePath: string
+}) {
+  const filters = [
+    { label: "All", value: null },
+    { label: "Positive", value: "positive" },
+    { label: "Neutral", value: "neutral" },
+    { label: "Negative", value: "negative" },
+  ]
+
+  return (
+    <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+      {filters.map((filter) => (
+        <Link
+          key={filter.label}
+          href={filter.value ? `${basePath}?sentiment=${filter.value}` : basePath}
+          style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 10,
+            padding: "4px 10px",
+            background: sentiment === filter.value ? "var(--accent)" : "var(--surface)",
+            color: sentiment === filter.value ? "#000" : "var(--muted)",
+            border: "1px solid var(--border)",
+            borderRadius: 3,
+            textDecoration: "none",
+          }}
+        >
+          {filter.label}
+        </Link>
+      ))}
+    </div>
   )
 }

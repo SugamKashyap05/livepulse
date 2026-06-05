@@ -1,25 +1,34 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { MODELS, structuredChat } from "@/lib/ollama"
+import { MODELS, logAiAction, structuredChat } from "@/lib/ollama"
 
 export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
-    const { id, title, description } = await request.json()
+    const { id } = await request.json()
 
-    if (!id || !title) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 })
+    if (!id) {
+      return NextResponse.json({ error: "Missing id" }, { status: 400 })
     }
 
-    const existing = await prisma.newsArticle.findUnique({
-      where: { id },
-      select: { sentiment: true },
+    const article = await prisma.newsArticle.findFirst({
+      where: { id, published: true },
+      select: { id: true, title: true, description: true, sentiment: true },
     })
 
-    if (existing?.sentiment) {
-      return NextResponse.json({ sentiment: existing.sentiment, cached: true })
+    if (!article) {
+      return NextResponse.json(
+        { error: "Article not found" },
+        { status: 404 }
+      )
     }
+
+    if (article.sentiment) {
+      return NextResponse.json({ sentiment: article.sentiment, cached: true })
+    }
+
+    const { title, description } = article
 
     const prompt = `Analyze the sentiment of this news article. Is it Positive, Neutral, or Negative?
         
@@ -34,6 +43,15 @@ Return as JSON: { "sentiment": "positive" | "neutral" | "negative", "confidence"
       response = await structuredChat<{ sentiment: string, confidence: number }>(prompt, MODELS.FAST)
     } catch (error) {
       console.error("[AI sentiment unavailable]:", error)
+      await logAiAction({
+        action: "sentiment",
+        model: MODELS.FAST,
+        prompt: prompt.slice(0, 200),
+        tokens: null,
+        ms: null,
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }).catch(() => {})
       return NextResponse.json(
         { error: "AI service unavailable", fallback: true },
         { status: 503 }
@@ -48,22 +66,22 @@ Return as JSON: { "sentiment": "positive" | "neutral" | "negative", "confidence"
       : "neutral"
 
     await prisma.newsArticle.update({
-      where: { id },
+      where: { id: article.id },
       data: { sentiment, scored: true },
     })
 
-    // Log action
-    await prisma.aiLog.create({
-      data: {
-        action: "sentiment",
-        model: MODELS.FAST,
-        prompt: title.substring(0, 100),
-        ms,
-      }
+    await logAiAction({
+      action: "sentiment",
+      model: MODELS.FAST,
+      prompt: prompt.slice(0, 200),
+      tokens: null,
+      ms,
+      success: true,
     })
 
     return NextResponse.json({ sentiment, cached: false })
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+    console.error("[ai sentiment] error:", error)
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }
 }

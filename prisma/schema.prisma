@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./livepulse.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model NewsArticle {
@@ -20,31 +20,36 @@ model NewsArticle {
   fetchedAt   DateTime @default(now())
 
   // AI Fields
-  summary      String?
-  sentiment    String?   // "positive" | "neutral" | "negative"
-  aiTags       String?   // JSON string of tags
-  aiProcessed  Boolean   @default(false)
-  aiGenerated  Boolean   @default(false) // Articles created by Scout
-  
+  summary     String?
+  sentiment   String? // "positive" | "neutral" | "negative"
+  aiTags      String? // JSON string of tags
+  aiProcessed Boolean @default(false)
+  aiGenerated Boolean @default(false) // Articles created by Scout
+
   // Agentic Phase
-  factScore    Int?      // 0-100
-  biasAnalysis String?   // Short summary of political/emotional bias
-  agentNotes   String?   // Internal agent discussion notes
-  published    Boolean   @default(true) // Set to false for AI drafts
-  scored       Boolean   @default(false) // Used for batch processing tracking
+  factScore    Int? // 0-100
+  biasAnalysis String? // Short summary of political/emotional bias
+  agentNotes   String? // Internal agent discussion notes
+  published    Boolean           @default(true) // Set to false for AI drafts
+  scored       Boolean           @default(false) // Used for batch processing tracking
+  bookmarks    UserBookmark[]
+  reads        UserArticleRead[]
 
   @@index([topic])
   @@index([slug])
   @@index([fetchedAt])
+  @@index([published, pubDate(sort: Desc)])
+  @@index([topic, published, pubDate(sort: Desc)])
+  @@index([published, fetchedAt(sort: Desc)])
 }
 
 model AgentActivity {
   id        String   @id @default(cuid())
-  agent     String   // "Scout" | "Fact-Checker" | "Spin-Doctor"
-  action    String   // "Verifying" | "Analyzing Bias" | "Scanning"
-  targetId  String?  // Article ID
-  status    String   // "thinking" | "completed" | "error"
-  content   String?  // The "thought" or result snippet
+  agent     String // "Scout" | "Fact-Checker" | "Spin-Doctor"
+  action    String // "Verifying" | "Analyzing Bias" | "Scanning"
+  targetId  String? // Article ID
+  status    String // "thinking" | "completed" | "error"
+  content   String? // The "thought" or result snippet
   createdAt DateTime @default(now())
 
   @@index([createdAt])
@@ -52,20 +57,83 @@ model AgentActivity {
 
 model DailyDigest {
   id        String   @id @default(cuid())
-  date      String   @unique  // "2026-03-27"
-  content   String            // AI generated briefing
-  model     String?           // The model used for this digest
+  date      String   @unique // "2026-03-27"
+  content   String // AI generated briefing
+  model     String? // The model used for this digest
   createdAt DateTime @default(now())
 }
 
 model AiLog {
   id        String   @id @default(cuid())
-  action    String            // "summarize" | "tag" | "sentiment" | "chat"
-  model     String            // "llama3"
+  action    String // "summarize" | "tag" | "sentiment" | "chat"
+  model     String // "llama3"
   prompt    String?
   tokens    Int?
   ms        Int?
-  success   Boolean          @default(true)
+  success   Boolean  @default(true)
   error     String?
   createdAt DateTime @default(now())
+}
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  country   String?
+  region    String?
+  city      String?
+  onboarded Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserTopicFollow {
+  id        String   @id @default(cuid())
+  userId    String
+  topicSlug String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, topicSlug])
+  @@index([userId])
+}
+
+model UserBookmark {
+  id        String      @id @default(cuid())
+  userId    String
+  articleId String
+  createdAt DateTime    @default(now())
+  article   NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+  @@index([userId])
+}
+
+model UserArticleRead {
+  id        String      @id @default(cuid())
+  userId    String
+  articleId String
+  readAt    DateTime    @default(now())
+  article   NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+  @@index([userId, readAt(sort: Desc)])
+}
+
+model FeedSource {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  url         String    @unique
+  topic       String
+  slug        String
+  region      String    @default("global")
+  enabled     Boolean   @default(true)
+  priority    Int       @default(0)
+  lastFetched DateTime?
+  lastStatus  String?
+  failCount   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([topic])
+  @@index([region])
+  @@index([enabled])
 }

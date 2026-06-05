@@ -29,6 +29,19 @@ export const AGENTS = {
   }
 }
 
+function sanitizeForPrompt(text: string | null | undefined): string {
+  if (!text) return ""
+  return text
+    .replace(/[<>]/g, "")
+    .replace(/ignore\s+(all\s+)?(previous|prior)\s+instructions?/gi, "[redacted]")
+    .replace(/system\s*prompt/gi, "[redacted]")
+    .replace(/\[INST\]/gi, "")
+    .replace(/<\|.*?\|>/g, "")
+    .replace(/you\s+are\s+now/gi, "[redacted]")
+    .trim()
+    .slice(0, 500)
+}
+
 async function recordActivity(agent: string, action: string, status: string, targetId?: string, content?: string) {
   return await prisma.agentActivity.create({
     data: { agent, action, status, targetId, content }
@@ -46,9 +59,9 @@ export async function runFactChecker(articleId: string) {
 
   try {
     const prompt = `Analyze this article for factuality:
-Title: ${article.title}
-Source: ${article.source}
-Content: ${article.description}
+Title: ${sanitizeForPrompt(article.title)}
+Source: ${sanitizeForPrompt(article.source)}
+Content: ${sanitizeForPrompt(article.description)}
 
 Task:
 1. Rate the factual consistency from 0 to 100.
@@ -82,9 +95,25 @@ REASON: [text]`
       data: { status: "completed", content: `Verified with score ${score}` }
     })
 
-    await logAiAction("fact-check", MODELS.FAST, result.ms, result.tokens)
+    await logAiAction({
+      action: "fact-check",
+      model: MODELS.FAST,
+      prompt: prompt.slice(0, 200),
+      tokens: result.tokens ?? null,
+      ms: result.ms ?? null,
+      success: true,
+    })
     return score
   } catch (e) {
+    await logAiAction({
+      action: "fact-check",
+      model: MODELS.FAST,
+      prompt: article.title.slice(0, 200),
+      tokens: null,
+      ms: null,
+      success: false,
+      error: String(e),
+    }).catch(() => {})
     await prisma.agentActivity.update({
       where: { id: activity.id },
       data: { status: "error", content: String(e) }
@@ -104,9 +133,9 @@ export async function runSpinDoctor(articleId: string) {
 
   try {
     const prompt = `Analyze the reporting bias of this piece:
-Title: ${article.title}
-Source: ${article.source}
-Content: ${article.description}
+Title: ${sanitizeForPrompt(article.title)}
+Source: ${sanitizeForPrompt(article.source)}
+Content: ${sanitizeForPrompt(article.description)}
 
 Task: Summarize the emotional or political lean of this reporting in one sentence.`
 
@@ -127,9 +156,25 @@ Task: Summarize the emotional or political lean of this reporting in one sentenc
       data: { status: "completed", content: "Bias analysis finished" }
     })
 
-    await logAiAction("bias-analysis", MODELS.FAST, result.ms, result.tokens)
+    await logAiAction({
+      action: "spin-doctor",
+      model: MODELS.FAST,
+      prompt: prompt.slice(0, 200),
+      tokens: result.tokens ?? null,
+      ms: result.ms ?? null,
+      success: true,
+    })
     return bias
   } catch (e) {
+    await logAiAction({
+      action: "spin-doctor",
+      model: MODELS.FAST,
+      prompt: article.title.slice(0, 200),
+      tokens: null,
+      ms: null,
+      success: false,
+      error: String(e),
+    }).catch(() => {})
     await prisma.agentActivity.update({
       where: { id: activity.id },
       data: { status: "error", content: String(e) }
@@ -144,9 +189,10 @@ Task: Summarize the emotional or political lean of this reporting in one sentenc
  */
 export async function runScoutGeneration() {
   const activity = await recordActivity("Scout", "Generating Autonomous Reports", "thinking")
+  let lastPrompt = "Scout generation"
 
   try {
-    const topics = ["Technology", "World", "Business", "Science", "Sports", "India"]
+    const topics = ["technology", "world", "business", "science", "sports", "india"]
     let generatedCount = 0
 
     for (const topicName of topics) {
@@ -154,7 +200,13 @@ export async function runScoutGeneration() {
       const context = await prisma.newsArticle.findMany({
         where: { topic: topicName, image: { not: null } },
         take: 5,
-        orderBy: { pubDate: "desc" }
+        orderBy: { pubDate: "desc" },
+        select: {
+          title: true,
+          description: true,
+          source: true,
+          image: true,
+        },
       })
 
       if (context.length === 0) continue
@@ -163,7 +215,15 @@ export async function runScoutGeneration() {
       const image = context[0].image
 
       // 3. Generate summary of news context
-      const newsGist = context.map(c => `- ${c.title}`).join("\n")
+      const newsGist = context
+        .map((c) =>
+          `- ${sanitizeForPrompt(c.title)} (${sanitizeForPrompt(c.source)})${
+            c.description
+              ? `\n  ${sanitizeForPrompt(c.description).slice(0, 200)}`
+              : ""
+          }`
+        )
+        .join("\n")
 
       const prompt = `Based on these recent headlines in ${topicName}:\n${newsGist}\n\nTask:
 Write a single, 3-paragraph breaking news report synthesis that connects these events.
@@ -172,6 +232,7 @@ Ensure the tone is professional, investigative, and engaging.
 Format:
 TITLE: [Headline]
 CONTENT: [Body text]`
+      lastPrompt = prompt
 
       const result = await ollamaChat(MODELS.SUMMARY, [
         { role: "system", content: AGENTS.WRITER.systemPrompt },
@@ -190,18 +251,24 @@ CONTENT: [Body text]`
           id,
           title,
           description: body,
-          link: `https://livepulse.ai/reports/${id}`,
+          link: `/ai-news/${id}`,
           pubDate: new Date(),
           source: "LivePulse AI",
-          topic: topicName,
+          topic: topicName.toLowerCase(),
           slug: topicName.toLowerCase(),
           image: image,
-          aiProcessed: true,
+          aiProcessed: false,
           aiGenerated: true,
           published: false, // Wait for admin approval
-          factScore: 95,
-          biasAnalysis: "AI Synthesized - Multi-source balanced report"
-        } as any
+        }
+      })
+      await logAiAction({
+        action: "scout",
+        model: MODELS.SUMMARY,
+        prompt: prompt.slice(0, 200),
+        tokens: result.tokens ?? null,
+        ms: result.ms ?? null,
+        success: true,
       })
       generatedCount++
     }
@@ -213,6 +280,15 @@ CONTENT: [Body text]`
 
     return true
   } catch (e) {
+    await logAiAction({
+      action: "scout",
+      model: MODELS.SUMMARY,
+      prompt: lastPrompt.slice(0, 200),
+      tokens: null,
+      ms: null,
+      success: false,
+      error: String(e),
+    }).catch(() => {})
     await prisma.agentActivity.update({
       where: { id: activity.id },
       data: { status: "error", content: String(e) }
@@ -225,13 +301,14 @@ CONTENT: [Body text]`
  * Full Agentic Cycle updated with Generation
  */
 export async function runFullAgenticCycle() {
-  // First, generate new content
+  // Phase 1: Generate new Scout drafts
   await runScoutGeneration()
 
-  // Then process existing unprocessed articles
+  // Phase 2: Process all unprocessed articles, including fresh Scout drafts.
   const unprocessed = await prisma.newsArticle.findMany({
     where: { aiProcessed: false },
-    take: 10
+    take: 10,
+    orderBy: { fetchedAt: "desc" },
   })
 
   for (const art of unprocessed) {
@@ -239,7 +316,7 @@ export async function runFullAgenticCycle() {
     await runSpinDoctor(art.id)
     await prisma.newsArticle.update({
       where: { id: art.id },
-      data: { aiProcessed: true } as any
+      data: { aiProcessed: true }
     })
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { isAdminAuthorized } from "@/lib/adminAuth"
 import { prisma } from "@/lib/db"
 import { MODELS, chat, structuredChat } from "@/lib/ollama"
 
@@ -6,8 +7,15 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 export async function POST(request: Request) {
+  if (!isAdminAuthorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   try {
-    const { task, limit = 20 } = await request.json()
+    const body = await request.json()
+    const { task } = body
+    const rawLimit = parseInt(body.limit ?? "20")
+    const limit = Math.min(Math.max(1, rawLimit), 50)
 
     const articles = await prisma.newsArticle.findMany({
       where:
@@ -107,6 +115,7 @@ export async function POST(request: Request) {
       total: articles.length,
     })
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+    console.error("[ai batch] error:", error)
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }
 }

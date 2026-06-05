@@ -2,29 +2,48 @@
 
 import { useState } from "react"
 import { NewsItem } from "@/types/news"
+import { getInternalArticleLink } from "@/lib/articleLinks"
 
 const TOPIC_COLORS: Record<string, string> = {
   World: "#6c8fff",
-  Technology: "#4af0c4",
+  Technology: "#6c8fff",
   India: "#f97316",
   Business: "#f5c542",
   Science: "#a78bfa",
   Sports: "#f472b6",
+  world: "#6c8fff",
+  technology: "#6c8fff",
+  india: "#f97316",
+  business: "#f5c542",
+  science: "#a78bfa",
+  sports: "#f472b6",
+  health: "#34d399",
+  climate: "#22c55e",
+  politics: "#fb7185",
 }
 
 const TOPIC_BG: Record<string, string> = {
   World: "rgba(108,143,255,0.06)",
-  Technology: "rgba(74,240,196,0.06)",
+  Technology: "rgba(108,143,255,0.06)",
   India: "rgba(249,115,22,0.06)",
   Business: "rgba(245,197,66,0.06)",
   Science: "rgba(167,139,250,0.06)",
   Sports: "rgba(244,114,182,0.06)",
+  world: "rgba(108,143,255,0.06)",
+  technology: "rgba(108,143,255,0.06)",
+  india: "rgba(249,115,22,0.06)",
+  business: "rgba(245,197,66,0.06)",
+  science: "rgba(167,139,250,0.06)",
+  sports: "rgba(244,114,182,0.06)",
+  health: "rgba(52,211,153,0.06)",
+  climate: "rgba(34,197,94,0.06)",
+  politics: "rgba(251,113,133,0.06)",
 }
 
 const SENTIMENT_CONFIG = {
-  positive: { color: "#4af0c4", label: "▲ Positive" },
-  negative: { color: "#ff4d4d", label: "▼ Negative" },
-  neutral:  { color: "#7a7d8a", label: "● Neutral" },
+  positive: { color: "var(--positive)", label: "Positive" },
+  negative: { color: "var(--negative)", label: "Negative" },
+  neutral: { color: "var(--neutral)", label: "Neutral" },
 }
 
 export interface NewsItemWithAI extends NewsItem {
@@ -32,17 +51,21 @@ export interface NewsItemWithAI extends NewsItem {
   sentiment?: string
   aiTags?: string
   aiGenerated?: boolean
+  isRead?: boolean
+  isBookmarked?: boolean
 }
 
 export default function NewsCard({ item }: { item: NewsItemWithAI }) {
-  const color = TOPIC_COLORS[item.topic] || "#6b6e7d"
-  const bg = TOPIC_BG[item.topic] || "rgba(255,255,255,0.03)"
+  const color = TOPIC_COLORS[item.topic] || "var(--muted)"
+  const bg = TOPIC_BG[item.topic] || "var(--surface2)"
+  const articleHref = getInternalArticleLink(item)
 
   const [summary, setSummary] = useState<string | null>(item.summary || null)
   const [sentiment, setSentiment] = useState<string | null>(item.sentiment || null)
   const [loadingSummary, setLoadingSummary] = useState(false)
   const [loadingSentiment, setLoadingSentiment] = useState(false)
   const [loadingTags, setLoadingTags] = useState(false)
+  const [bookmarked, setBookmarked] = useState<boolean>(item.isBookmarked ?? false)
   const [showSummary, setShowSummary] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
 
@@ -156,54 +179,104 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
     }
   }
 
+  async function handleBookmark(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const method = bookmarked ? "DELETE" : "POST"
+    try {
+      const response = await fetch("/api/user/bookmarks", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ articleId: item.id }),
+      })
+
+      if (response.ok) {
+        setBookmarked((value) => !value)
+      }
+    } catch {
+      // Bookmarking is user-only; logged-out or transient failures should not break the card.
+    }
+  }
+
+  function handleArticleOpen() {
+    fetch("/api/user/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ articleId: item.id }),
+    }).catch(() => {})
+  }
+
   const sentimentCfg =
     SENTIMENT_CONFIG[sentiment as keyof typeof SENTIMENT_CONFIG]
 
   return (
-    <div
+    <article
       style={{
-        display: "flex",
-        flexDirection: "column",
         background: "var(--surface)",
         border: "1px solid var(--border)",
-        borderRadius: 6,
+        borderRadius: 8,
         overflow: "hidden",
-        transition: "border-color 0.2s, transform 0.15s",
+        display: "flex",
+        flexDirection: "column",
+        transition: "border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease",
+        cursor: "pointer",
+        opacity: item.isRead ? 0.55 : 1,
         position: "relative",
-        borderTop: item.aiGenerated ? `2px solid var(--accent)` : "1px solid var(--border)",
       }}
-      onMouseEnter={e => {
-        const el = e.currentTarget as HTMLElement
-        el.style.borderColor = color
-        el.style.transform = "translateY(-2px)"
+      onMouseEnter={(event) => {
+        event.currentTarget.style.borderColor = "var(--border2)"
+        event.currentTarget.style.transform = "translateY(-2px)"
+        event.currentTarget.style.boxShadow = "var(--shadow-md)"
       }}
-      onMouseLeave={e => {
-        const el = e.currentTarget as HTMLElement
-        el.style.borderColor = "var(--border)"
-        el.style.transform = "translateY(0)"
+      onMouseLeave={(event) => {
+        event.currentTarget.style.borderColor = "var(--border)"
+        event.currentTarget.style.transform = "translateY(0)"
+        event.currentTarget.style.boxShadow = "none"
       }}
     >
-      {/* Image or placeholder */}
-      {item.image ? (
-        <a
-          href={item.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ display: "block", width: "100%", height: 180, overflow: "hidden", flexShrink: 0 }}
-        >
+      {item.aiGenerated && (
+        <div style={{
+          height: 2,
+          background: "linear-gradient(90deg, var(--accent), transparent)",
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 2,
+        }} />
+      )}
+
+      <div style={{
+        position: "relative",
+        height: 180,
+        overflow: "hidden",
+        background: "var(--surface2)",
+      }}>
+        {item.image ? (
           <img
             src={item.image}
             alt={item.title}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            onError={e => {
-              const wrapper = (e.currentTarget as HTMLElement).parentElement
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              transition: "transform 0.4s ease",
+            }}
+            onMouseEnter={(event) => {
+              event.currentTarget.style.transform = "scale(1.03)"
+            }}
+            onMouseLeave={(event) => {
+              event.currentTarget.style.transform = "scale(1)"
+            }}
+            onError={(event) => {
+              const wrapper = (event.currentTarget as HTMLElement).parentElement
               if (wrapper) {
                 wrapper.style.background = bg
                 wrapper.style.display = "flex"
                 wrapper.style.alignItems = "center"
                 wrapper.style.justifyContent = "center"
-                wrapper.style.height = "120px"
-                // Safe DOM construction: no innerHTML, no XSS.
+                wrapper.style.height = "180px"
                 const existing = wrapper.querySelector("[data-src-label]")
                 if (!existing) {
                   const span = document.createElement("span")
@@ -222,133 +295,132 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
               }
             }}
           />
-        </a>
-      ) : (
-        <a
-          href={item.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
+        ) : (
+          <div style={{
+            height: "100%",
             display: "flex",
-            width: "100%",
-            height: 90,
-            flexShrink: 0,
-            background: bg,
             alignItems: "center",
             justifyContent: "center",
-            borderBottom: "1px solid var(--border)",
-            textDecoration: "none",
-          }}
-        >
-          <span style={{
-            fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 11,
-            letterSpacing: "1.5px",
-            color,
-            textTransform: "uppercase",
-            opacity: 0.7,
+            background: bg,
           }}>
-            {item.source}
-          </span>
-        </a>
-      )}
+            <span style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 10,
+              letterSpacing: "2px",
+              color: "var(--muted2)",
+              textTransform: "uppercase",
+            }}>
+              {item.source}
+            </span>
+          </div>
+        )}
 
-      {/* AI Badge for generated content */}
-      {item.aiGenerated && (
-        <div style={{
-          position: "absolute",
-          top: 12,
-          right: 12,
-          background: "rgba(74,240,196,0.9)",
-          color: "#000",
-          fontFamily: "'IBM Plex Mono', monospace",
-          fontSize: 8,
-          fontWeight: 800,
-          padding: "2px 6px",
-          borderRadius: 2,
-          letterSpacing: "1px",
-          zIndex: 10,
-          boxShadow: "0 4px 10px rgba(0,0,0,0.3)"
-        }}>
-          AI GENERATED
-        </div>
-      )}
+        {sentiment && sentimentCfg && (
+          <div style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            background: "rgba(9,9,12,0.85)",
+            backdropFilter: "blur(8px)",
+            border: `1px solid ${sentimentCfg.color}40`,
+            borderRadius: 3,
+            padding: "3px 8px",
+            fontFamily: "var(--font-mono)",
+            fontSize: 9,
+            letterSpacing: "1px",
+            color: sentimentCfg.color,
+          }}>
+            {sentimentCfg.label}
+          </div>
+        )}
+
+        {item.aiGenerated && (
+          <div style={{
+            position: "absolute",
+            top: 10,
+            left: 10,
+            background: "rgba(9,9,12,0.85)",
+            backdropFilter: "blur(8px)",
+            border: "1px solid var(--border-accent)",
+            borderRadius: 3,
+            padding: "3px 8px",
+            fontFamily: "var(--font-mono)",
+            fontSize: 9,
+            letterSpacing: "1px",
+            color: "var(--accent)",
+          }}>
+            AI
+          </div>
+        )}
+      </div>
 
       <div style={{
-        padding: "14px 16px",
+        padding: "16px 18px",
+        flex: 1,
         display: "flex",
         flexDirection: "column",
         gap: 10,
-        flex: 1,
       }}>
-        {/* Topic + time + sentiment */}
         <div style={{
           display: "flex",
-          alignItems: "center",
           justifyContent: "space-between",
-          gap: 8,
+          alignItems: "center",
+          gap: 10,
         }}>
           <span style={{
-            fontSize: 10,
-            fontFamily: "'IBM Plex Mono', monospace",
-            letterSpacing: "1px",
-            color,
+            fontFamily: "var(--font-mono)",
+            fontSize: 9,
+            letterSpacing: "1.5px",
             textTransform: "uppercase",
-            fontWeight: 500,
+            color: "var(--muted)",
+          }}>
+            {item.source}
+          </span>
+          <span style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 9,
+            letterSpacing: "1px",
+            textTransform: "uppercase",
+            color: "var(--accent)",
+            padding: "2px 7px",
+            border: "1px solid var(--border-accent)",
+            borderRadius: 2,
           }}>
             {item.topic}
           </span>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {sentimentCfg && (
-              <span style={{
-                fontSize: 9,
-                fontFamily: "'IBM Plex Mono', monospace",
-                color: sentimentCfg.color,
-                letterSpacing: "0.5px",
-              }}>
-                {sentimentCfg.label}
-              </span>
-            )}
-            <span style={{
-              fontSize: 10,
-              fontFamily: "'IBM Plex Mono', monospace",
-              color: "var(--muted)",
-              whiteSpace: "nowrap",
-            }}>
-              {item.pubDate}
-            </span>
-          </div>
         </div>
 
-        {/* Title */}
         <a
-          href={item.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ textDecoration: "none" }}
-        >
-          <h2 style={{
-            fontSize: 14,
-            fontWeight: 500,
-            lineHeight: 1.45,
+          href={articleHref}
+          onClick={handleArticleOpen}
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 17,
+            fontWeight: 700,
+            lineHeight: 1.35,
             color: "var(--text)",
-            margin: 0,
             display: "-webkit-box",
             WebkitLineClamp: 3,
             WebkitBoxOrient: "vertical",
             overflow: "hidden",
-          }}>
-            {item.title}
-          </h2>
+            transition: "color 0.15s ease",
+          }}
+          onMouseEnter={(event) => {
+            event.currentTarget.style.color = "var(--accent)"
+          }}
+          onMouseLeave={(event) => {
+            event.currentTarget.style.color = "var(--text)"
+          }}
+        >
+          {item.title}
         </a>
 
-        {/* Description */}
         {item.description && !showSummary && (
           <p style={{
-            fontSize: 12,
-            color: "var(--muted)",
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
             lineHeight: 1.6,
-            margin: 0,
+            color: "var(--text-dim)",
             display: "-webkit-box",
             WebkitLineClamp: 2,
             WebkitBoxOrient: "vertical",
@@ -358,151 +430,171 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
           </p>
         )}
 
-        {/* AI Summary */}
-        {showSummary && summary && (
-          <div style={{
-            background: "rgba(74,240,196,0.05)",
-            border: "1px solid rgba(74,240,196,0.15)",
-            borderRadius: 4,
-            padding: "10px 12px",
-          }}>
-            <div style={{
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 9,
-              letterSpacing: "1.5px",
-              color: "var(--accent)",
-              textTransform: "uppercase",
-              marginBottom: 6,
-            }}>
-              AI Summary
-            </div>
-            <div style={{
-              fontSize: 12,
-              color: "var(--text)",
-              lineHeight: 1.7,
-              whiteSpace: "pre-line",
-            }}>
-              {summary}
-            </div>
-          </div>
-        )}
-
-        {/* AI Tags */}
         {aiTags.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {aiTags.map((tag) => (
-              <span
+            {aiTags.slice(0, 4).map((tag) => (
+              <a
                 key={tag}
+                href={`/tag/${encodeURIComponent(tag)}`}
+                onClick={(event) => event.stopPropagation()}
                 style={{
-                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontFamily: "var(--font-mono)",
                   fontSize: 9,
-                  letterSpacing: "0.5px",
                   padding: "2px 7px",
                   background: "var(--surface2)",
                   border: "1px solid var(--border)",
                   borderRadius: 2,
                   color: "var(--muted)",
+                  letterSpacing: "0.5px",
+                  transition: "border-color 0.15s, color 0.15s",
+                }}
+                onMouseEnter={(event) => {
+                  event.currentTarget.style.borderColor = "var(--border-accent)"
+                  event.currentTarget.style.color = "var(--accent)"
+                }}
+                onMouseLeave={(event) => {
+                  event.currentTarget.style.borderColor = "var(--border)"
+                  event.currentTarget.style.color = "var(--muted)"
                 }}
               >
-                {tag}
-              </span>
+                #{tag}
+              </a>
             ))}
+          </div>
+        )}
+
+        {showSummary && summary && (
+          <div style={{
+            padding: "10px 14px",
+            background: "var(--surface2)",
+            border: "1px solid var(--border)",
+            borderLeft: "2px solid var(--accent)",
+            borderRadius: 4,
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            lineHeight: 1.7,
+            color: "var(--text-dim)",
+            whiteSpace: "pre-wrap",
+          }}>
+            {summary}
           </div>
         )}
 
         {aiError && (
           <div style={{
-            fontFamily: "'IBM Plex Mono', monospace",
+            fontFamily: "var(--font-mono)",
             fontSize: 10,
-            color: "var(--red)",
+            color: "var(--negative)",
+            padding: "6px 10px",
+            background: "rgba(245,101,101,0.06)",
+            border: "1px solid rgba(245,101,101,0.2)",
+            borderRadius: 3,
           }}>
             {aiError}
           </div>
         )}
-
-        {/* Footer */}
-        <div style={{
-          marginTop: "auto",
-          paddingTop: 10,
-          borderTop: "1px solid var(--border)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}>
-          <span style={{
-            fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 10,
-            color: "var(--muted)",
-          }}>
-            {item.source}
-          </span>
-
-          <div style={{ display: "flex", gap: 6 }}>
-            {aiTags.length === 0 && (
-              <button
-                onClick={handleGenerateTags}
-                disabled={loadingTags}
-                title="Generate AI tags"
-                style={{
-                  fontFamily: "'IBM Plex Mono', monospace",
-                  fontSize: 9,
-                  letterSpacing: "0.5px",
-                  padding: "3px 8px",
-                  background: "transparent",
-                  color: "var(--muted)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 2,
-                  cursor: loadingTags ? "not-allowed" : "pointer",
-                }}
-              >
-                {loadingTags ? "..." : "tags"}
-              </button>
-            )}
-
-            <button
-              onClick={handleSentiment}
-              disabled={loadingSentiment || !!sentiment}
-              title="Analyze sentiment"
-              style={{
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 9,
-                letterSpacing: "0.5px",
-                padding: "3px 8px",
-                background: "transparent",
-                color: sentiment
-                  ? SENTIMENT_CONFIG[sentiment as keyof typeof SENTIMENT_CONFIG]?.color || "var(--muted)"
-                  : "var(--muted)",
-                border: "1px solid var(--border)",
-                borderRadius: 2,
-                cursor: sentiment || loadingSentiment ? "default" : "pointer",
-              }}
-            >
-              {loadingSentiment ? "..." : sentiment ? "✓" : "mood"}
-            </button>
-
-            <button
-              onClick={handleSummarize}
-              disabled={loadingSummary}
-              title="AI summarize"
-              style={{
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 9,
-                letterSpacing: "0.5px",
-                padding: "3px 8px",
-                background: showSummary
-                  ? "rgba(74,240,196,0.1)"
-                  : "transparent",
-                color: showSummary ? "var(--accent)" : "var(--muted)",
-                border: `1px solid ${showSummary ? "rgba(74,240,196,0.3)" : "var(--border)"}`,
-                borderRadius: 2,
-                cursor: loadingSummary ? "not-allowed" : "pointer",
-              }}
-            >
-              {loadingSummary ? "..." : summary ? (showSummary ? "hide" : "summary") : "AI ✦"}
-            </button>
-          </div>
-        </div>
       </div>
-    </div>
+
+      <div style={{
+        borderTop: "1px solid var(--border)",
+        padding: "10px 18px",
+        display: "flex",
+        gap: 6,
+        alignItems: "center",
+      }}>
+        <span style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 9,
+          color: "var(--muted)",
+          flex: 1,
+        }}>
+          {item.pubDate}
+          {item.isRead && (
+            <span style={{ marginLeft: 8, color: "var(--muted2)" }}>
+              · READ
+            </span>
+          )}
+        </span>
+
+        <button
+          type="button"
+          onClick={handleBookmark}
+          title={bookmarked ? "Remove bookmark" : "Bookmark"}
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 12,
+            lineHeight: 1,
+            padding: "4px 8px",
+            background: "transparent",
+            color: bookmarked ? "var(--accent)" : "var(--muted)",
+            border: "1px solid var(--border)",
+            borderRadius: 2,
+          }}
+        >
+          {bookmarked ? "★" : "☆"}
+        </button>
+
+        {aiTags.length === 0 && (
+          <button
+            onClick={handleGenerateTags}
+            disabled={loadingTags}
+            title="Generate AI tags"
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 9,
+              letterSpacing: "0.5px",
+              padding: "4px 8px",
+              background: "transparent",
+              color: "var(--muted)",
+              border: "1px solid var(--border)",
+              borderRadius: 2,
+              cursor: loadingTags ? "not-allowed" : "pointer",
+            }}
+          >
+            {loadingTags ? "..." : "tags"}
+          </button>
+        )}
+
+        <button
+          onClick={handleSentiment}
+          disabled={loadingSentiment || !!sentiment}
+          title="Analyze sentiment"
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 9,
+            letterSpacing: "0.5px",
+            padding: "4px 8px",
+            background: "transparent",
+            color: sentiment
+              ? SENTIMENT_CONFIG[sentiment as keyof typeof SENTIMENT_CONFIG]?.color || "var(--muted)"
+              : "var(--muted)",
+            border: "1px solid var(--border)",
+            borderRadius: 2,
+            cursor: sentiment || loadingSentiment ? "default" : "pointer",
+          }}
+        >
+          {loadingSentiment ? "..." : sentiment ? "✓" : "mood"}
+        </button>
+
+        <button
+          onClick={handleSummarize}
+          disabled={loadingSummary}
+          title="AI summarize"
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 9,
+            letterSpacing: "0.5px",
+            padding: "4px 8px",
+            background: showSummary ? "var(--accent-dim)" : "transparent",
+            color: showSummary ? "var(--accent)" : "var(--muted)",
+            border: `1px solid ${showSummary ? "var(--border-accent)" : "var(--border)"}`,
+            borderRadius: 2,
+            cursor: loadingSummary ? "not-allowed" : "pointer",
+          }}
+        >
+          {loadingSummary ? "..." : summary ? (showSummary ? "hide" : "summary") : "AI"}
+        </button>
+      </div>
+    </article>
   )
 }

@@ -33,13 +33,72 @@ export const MODELS = {
   FAST: process.env.OLLAMA_FAST_MODEL || "phi3:3.8b",
 }
 
-export async function logAiAction(action: string, model: string, ms: number, tokens?: number, success: boolean = true, error?: string) {
+type AiLogInput = {
+  action: string
+  model: string
+  prompt?: string | null
+  tokens?: number | null
+  ms?: number | null
+  success?: boolean
+  error?: string | null
+}
+
+export async function logAiAction(input: AiLogInput): Promise<void>
+export async function logAiAction(
+  action: string,
+  model: string,
+  ms: number,
+  tokens?: number,
+  success?: boolean,
+  error?: string
+): Promise<void>
+export async function logAiAction(
+  inputOrAction: AiLogInput | string,
+  model?: string,
+  ms?: number,
+  tokens?: number,
+  success: boolean = true,
+  error?: string
+) {
+  const input: AiLogInput = typeof inputOrAction === "string"
+    ? {
+        action: inputOrAction,
+        model: model || DEFAULT_MODEL,
+        ms: ms ?? null,
+        tokens: tokens ?? null,
+        success,
+        error: error ?? null,
+      }
+    : inputOrAction
+
   try {
     await prisma.aiLog.create({
-      data: { action, model, ms, tokens, success, error }
+      data: {
+        action: input.action,
+        model: input.model,
+        prompt: input.prompt ?? null,
+        tokens: input.tokens ?? null,
+        ms: input.ms ?? null,
+        success: input.success ?? true,
+        error: input.error ?? null,
+      }
     })
   } catch (e) {
     console.error("[AI Log Error]:", e)
+  }
+}
+
+async function getOllamaErrorMessage(response: Response) {
+  const body = await response.text().catch(() => "")
+  if (!body) {
+    return `Ollama error ${response.status}: ${response.statusText}`
+  }
+
+  try {
+    const data = JSON.parse(body) as { error?: string }
+    return `Ollama error ${response.status}: ${data.error || body}`
+  } catch {
+    return `Ollama error ${response.status}: ${body}`
   }
 }
 
@@ -90,7 +149,7 @@ export async function chat(prompt: string, model: string = DEFAULT_MODEL) {
     })
 
     if (!response.ok) {
-      throw new Error(`Ollama error: ${response.statusText}`)
+      throw new Error(await getOllamaErrorMessage(response))
     }
 
     const data: OllamaResponse = await response.json()
@@ -126,7 +185,7 @@ export async function structuredChat<T>(
     })
 
     if (!response.ok) {
-      throw new Error(`Ollama error: ${response.statusText}`)
+      throw new Error(await getOllamaErrorMessage(response))
     }
 
     const data: OllamaResponse = await response.json()
@@ -137,8 +196,28 @@ export async function structuredChat<T>(
   }
 }
 
-export async function generateDigest(articles: { title: string; source: string; topic: string }[]) {
-  const prompt = `Generate a concise, professional daily news digest from these articles:\n${articles.map(a => `- [${a.topic}] ${a.title} (${a.source})`).join("\n")}\n\nGroup by topic and highlight the most important breaking news.`
+export async function generateDigest(
+  articles: {
+    title: string
+    source: string
+    topic: string
+    description?: string | null
+    sentiment?: string | null
+  }[]
+) {
+  const prompt = `Generate a concise, professional daily news digest:
+
+${articles
+  .map(
+    (a) =>
+      `[${a.topic.toUpperCase()}] ${a.title} (${a.source})${
+        a.sentiment ? ` [${a.sentiment}]` : ""
+      }${a.description ? `\n  ${a.description.slice(0, 100)}` : ""}`
+  )
+  .join("\n")}
+
+Group by topic. Note overall sentiment trends per section.
+Highlight the most important breaking stories.`
   
   const result = await ollamaChat(MODELS.DIGEST, [
     { role: "system", content: "You are a professional news editor creating a concise daily briefing." },

@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server"
+import { validateAdminSession } from "@/app/api/admin/auth/route"
 
 export function isAdminAuthorized(request: NextRequest | Request): boolean {
   const adminSecret = process.env.ADMIN_SECRET
@@ -9,7 +10,10 @@ export function isAdminAuthorized(request: NextRequest | Request): boolean {
   const bearerToken = authHeader?.startsWith("Bearer ")
     ? authHeader.slice(7)
     : null
-  const cookieToken = req.cookies?.get?.("admin_token")?.value
+  if (bearerToken === adminSecret) return true
 
-  return bearerToken === adminSecret || cookieToken === adminSecret
+  const cookieToken = req.cookies?.get?.("admin_token")?.value
+  if (cookieToken && validateAdminSession(cookieToken)) return true
+
+  return false
 }

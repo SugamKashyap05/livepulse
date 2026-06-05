@@ -8,17 +8,40 @@ export async function DELETE(request: Request) {
   }
 
   const { searchParams } = new URL(request.url)
-  const days = parseInt(searchParams.get("days") || "3")
+  const rawDays = parseInt(searchParams.get("days") || "3")
+  const days = Number.isNaN(rawDays)
+    ? 3
+    : Math.max(1, Math.min(365, rawDays))
+  const confirm = searchParams.get("confirm")
 
   try {
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+
+    if (confirm !== "true") {
+      const count = await prisma.newsArticle.count({
+        where: {
+          fetchedAt: { lt: cutoff },
+          aiGenerated: false,
+        },
+      })
+      return NextResponse.json({
+        preview: true,
+        wouldDelete: count,
+        message: `Add ?confirm=true to delete ${count} articles`,
+      })
+    }
+
     const result = await prisma.newsArticle.deleteMany({
-      where: { pubDate: { lt: cutoff } },
+      where: {
+        fetchedAt: { lt: cutoff },
+        aiGenerated: false,
+      },
     })
     return NextResponse.json({ success: true, deleted: result.count })
   } catch (error) {
+    console.error("[admin purge] error:", error)
     return NextResponse.json(
-      { success: false, error: String(error) },
+      { success: false, error: "An error occurred" },
       { status: 500 }
     )
   }

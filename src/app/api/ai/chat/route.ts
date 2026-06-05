@@ -1,17 +1,55 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { MODELS, ollamaChat, logAiAction, OllamaMessage } from "@/lib/ollama"
+import { getMutableCurrentUserId } from "@/lib/auth"
+import type { Prisma } from "@prisma/client"
 
 export const maxDuration = 60
 
+const VALID_TOPICS = new Set([
+  "all",
+  "world",
+  "technology",
+  "india",
+  "business",
+  "science",
+  "sports",
+  "health",
+  "climate",
+  "politics",
+])
+
+const ALLOWED_ROLES = new Set(["user", "assistant"])
+
 export async function POST(request: Request) {
   try {
-    const { messages, topic } = await request.json()
+    const body = await request.json()
+    const { messages } = body
+    const rawTopic = body.topic
+    const topic =
+      typeof rawTopic === "string" && VALID_TOPICS.has(rawTopic.toLowerCase())
+        ? rawTopic.toLowerCase()
+        : "all"
+    const userId = await getMutableCurrentUserId()
+    let followedTopics: string[] = []
+
+    if (userId) {
+      const follows = await prisma.userTopicFollow.findMany({
+        where: { userId },
+        select: { topicSlug: true },
+      })
+      followedTopics = follows.map((follow) => follow.topicSlug)
+    }
+
+    const where: Prisma.NewsArticleWhereInput =
+      topic && topic !== "all"
+        ? { topic: { equals: topic } }
+        : followedTopics.length > 0
+          ? { topic: { in: followedTopics } }
+          : {}
 
     const recentArticles = await prisma.newsArticle.findMany({
-      where: topic && topic !== "all"
-        ? { topic: { equals: topic } }
-        : {},
+      where,
       orderBy: { pubDate: "desc" },
       take: 20,
       select: { title: true, source: true, topic: true, description: true, link: true },
@@ -29,9 +67,28 @@ If asked about something not in the articles, say so honestly.
 Current news context (latest ${recentArticles.length} articles):
 ${context}`
 
+    const sanitizedMessages = (Array.isArray(messages) ? messages : [])
+      .filter(
+        (message: unknown) =>
+          typeof message === "object" &&
+          message !== null &&
+          "role" in message &&
+          "content" in message &&
+          ALLOWED_ROLES.has((message as { role?: unknown }).role as string) &&
+          typeof (message as { content?: unknown }).content === "string" &&
+          ((message as { content: string }).content).length <= 2000
+      )
+      .slice(-20)
+      .map((message) => ({
+        role: (message as { role: "user" | "assistant" }).role,
+        content: (message as { content: string }).content
+          .replace(/[<>]/g, "")
+          .trim(),
+      }))
+
     const chatMessages: OllamaMessage[] = [
       { role: "system", content: systemPrompt },
-      ...messages,
+      ...sanitizedMessages,
     ]
 
     const model = MODELS.CHAT
@@ -44,6 +101,15 @@ ${context}`
       })
     } catch (error) {
       console.error("[AI chat unavailable]:", error)
+      await logAiAction({
+        action: "chat",
+        model,
+        prompt: systemPrompt.slice(0, 200),
+        tokens: null,
+        ms: null,
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }).catch(() => {})
       return NextResponse.json(
         { error: "AI service unavailable", fallback: true },
         { status: 503 }
@@ -51,10 +117,18 @@ ${context}`
     }
     const ms = Date.now() - start
 
-    await logAiAction("chat", model, ms, result.tokens)
+    await logAiAction({
+      action: "chat",
+      model,
+      prompt: systemPrompt.slice(0, 200),
+      tokens: result.tokens ?? null,
+      ms: result.ms ?? ms,
+      success: true,
+    })
 
     return NextResponse.json({ reply: result.content, model })
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+    console.error("[ai chat] error:", error)
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }
 }

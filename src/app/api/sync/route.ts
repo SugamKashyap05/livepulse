@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server"
-import { fetchAllFeeds } from "@/lib/fetchFeeds"
+import { fetchFeedsWithStatus } from "@/lib/fetchFeeds"
 import { prisma } from "@/lib/db"
-import { FEED_SOURCES } from "@/lib/sources"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization")
-  const isDev = process.env.NODE_ENV === "development"
-  
+
   if (
-    !isDev &&
     process.env.CRON_SECRET &&
     authHeader !== `Bearer ${process.env.CRON_SECRET}`
   ) {
@@ -20,7 +17,33 @@ export async function GET(request: Request) {
 
   try {
     console.log("[LivePulse] Starting RSS sync...")
-    const articles = await fetchAllFeeds()
+
+    let dbSources = await prisma.feedSource.findMany({
+      where: { enabled: true },
+      orderBy: { priority: "desc" },
+    })
+
+    if (dbSources.length === 0) {
+      const { FEED_SOURCES } = await import("@/lib/sources")
+      dbSources = FEED_SOURCES.map((source, index) => ({
+        id: `seed-${index}`,
+        name: source.name,
+        url: source.url,
+        topic: source.topic,
+        slug: source.slug,
+        region: source.region || "global",
+        enabled: true,
+        priority: source.priority || 5,
+        lastFetched: null,
+        lastStatus: null,
+        failCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }))
+    }
+
+    const { articles, successNames, failedNames } =
+      await fetchFeedsWithStatus(dbSources)
 
     if (articles.length === 0) {
       return NextResponse.json({
@@ -30,7 +53,7 @@ export async function GET(request: Request) {
     }
 
     const slugMap = Object.fromEntries(
-      FEED_SOURCES.map((s) => [s.name, s.slug])
+      dbSources.map((source) => [source.name, source.slug])
     )
 
     let saved = 0
@@ -55,7 +78,7 @@ export async function GET(request: Request) {
             fetchedAt: new Date(),
             slug: slugMap[article.source] || article.topic.toLowerCase(),
             source: article.source,
-            topic: article.topic,
+            topic: article.topic.toLowerCase(),
           },
           create: {
             id: article.id,
@@ -64,7 +87,7 @@ export async function GET(request: Request) {
             link: article.link,
             pubDate,
             source: article.source,
-            topic: article.topic,
+            topic: article.topic.toLowerCase(),
             slug: slugMap[article.source] || article.topic.toLowerCase(),
             image: article.image || null,
           },
@@ -84,16 +107,40 @@ export async function GET(request: Request) {
       },
     })
 
-    console.log(`[LivePulse] Sync done — saved: ${saved}, skipped: ${skipped}`)
+    if (successNames.length > 0) {
+      await prisma.feedSource.updateMany({
+        where: { name: { in: successNames } },
+        data: { lastFetched: new Date(), lastStatus: "ok", failCount: 0 },
+      })
+    }
+
+    if (failedNames.length > 0) {
+      await prisma.feedSource.updateMany({
+        where: { name: { in: failedNames } },
+        data: {
+          lastStatus: "error",
+          failCount: { increment: 1 },
+        },
+      })
+    }
+
+    console.log(`[LivePulse] Sync done - saved: ${saved}, skipped: ${skipped}`)
 
     return NextResponse.json({
       success: true,
       saved,
       skipped,
       total: articles.length,
+      sources: {
+        ok: successNames.length,
+        failed: failedNames.length,
+      },
     })
   } catch (error) {
     console.error("[LivePulse] Sync failed:", error)
-    return NextResponse.json({ success: false, error: String(error) }, { status: 500 })
+    return NextResponse.json(
+      { success: false, error: "An error occurred" },
+      { status: 500 }
+    )
   }
 }

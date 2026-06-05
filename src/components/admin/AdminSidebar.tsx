@@ -5,13 +5,13 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 const NAV = [
-  { label: "Dashboard", href: "/admin", icon: "📊" },
-  { label: "Newsroom", href: "/admin/newsroom", icon: "📡" },
-  { label: "AI Manager", href: "/admin/ai-manager", icon: "✦" },
-  { label: "Sources", href: "/admin/sources", icon: "📂" },
-  { label: "Articles", href: "/admin/articles", icon: "📰" },
-  { label: "Health", href: "/admin/health", icon: "🔋" },
-  { label: "Settings", href: "/admin/settings", icon: "⚙️" },
+  { label: "Dashboard", href: "/admin", icon: "D" },
+  { label: "Newsroom", href: "/admin/newsroom", icon: "N" },
+  { label: "AI Manager", href: "/admin/ai-manager", icon: "AI" },
+  { label: "Sources", href: "/admin/sources", icon: "S" },
+  { label: "Articles", href: "/admin/articles", icon: "A" },
+  { label: "Health", href: "/admin/health", icon: "H" },
+  { label: "Settings", href: "/admin/settings", icon: "SET" },
 ]
 
 export default function AdminSidebar() {
@@ -25,6 +25,11 @@ export default function AdminSidebar() {
     const next = !isCollapsed
     setIsCollapsed(next)
     localStorage.setItem("admin-sidebar-collapsed", String(next))
+  }
+
+  async function handleLogout() {
+    await fetch("/api/admin/logout", { method: "POST" })
+    window.location.href = "/admin/login"
   }
 
   return (
@@ -41,9 +46,8 @@ export default function AdminSidebar() {
       height: "100vh",
       overflow: "hidden",
     }}>
-      {/* Header */}
       <div style={{
-        padding: "20px",
+        padding: 20,
         height: 80,
         display: "flex",
         flexDirection: isCollapsed ? "column" : "row",
@@ -56,7 +60,7 @@ export default function AdminSidebar() {
           <div>
             <Link href="/" style={{ textDecoration: "none" }}>
               <div style={{
-                fontFamily: "'Playfair Display', serif",
+                fontFamily: "var(--font-display)",
                 fontSize: 20,
                 fontWeight: 900,
                 color: "var(--text)",
@@ -66,7 +70,7 @@ export default function AdminSidebar() {
               </div>
             </Link>
             <div style={{
-              fontFamily: "'IBM Plex Mono', monospace",
+              fontFamily: "var(--font-mono)",
               fontSize: 9,
               letterSpacing: "2px",
               color: "var(--accent)",
@@ -77,8 +81,9 @@ export default function AdminSidebar() {
             </div>
           </div>
         )}
-        
-        <button 
+
+        <button
+          type="button"
           onClick={toggleCollapse}
           style={{
             background: "rgba(255,255,255,0.03)",
@@ -94,11 +99,10 @@ export default function AdminSidebar() {
             fontSize: 10,
           }}
         >
-          {isCollapsed ? "→" : "←"}
+          {isCollapsed ? ">" : "<"}
         </button>
       </div>
 
-      {/* Navigation */}
       <nav style={{ padding: "12px 6px", flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
         {NAV.map((item) => {
           const isActive = item.href === "/admin"
@@ -114,48 +118,68 @@ export default function AdminSidebar() {
                 justifyContent: isCollapsed ? "center" : "flex-start",
                 gap: 12,
                 padding: "12px 14px",
-                fontFamily: "'IBM Plex Mono', monospace",
+                fontFamily: "var(--font-mono)",
                 fontSize: 11,
                 letterSpacing: "1px",
                 textTransform: "uppercase",
                 color: isActive ? "var(--accent)" : "var(--muted)",
-                textDecoration: "none",
                 borderRadius: 4,
-                background: isActive ? "rgba(74,240,196,0.05)" : "transparent",
+                background: isActive ? "var(--accent-dim)" : "transparent",
                 transition: "all 0.2s",
                 whiteSpace: "nowrap",
               }}
               title={isCollapsed ? item.label : ""}
             >
-              <span style={{ fontSize: 16 }}>{item.icon}</span>
+              <span style={{ fontSize: 11, minWidth: 18, textAlign: "center" }}>{item.icon}</span>
               {!isCollapsed && <span>{item.label}</span>}
             </Link>
           )
         })}
       </nav>
 
-      {/* Footer */}
       <div style={{
-        padding: "16px",
+        padding: 16,
         borderTop: "1px solid var(--border)",
-        display: "flex",
-        justifyContent: isCollapsed ? "center" : "flex-start",
+        display: "grid",
+        gap: 10,
       }}>
         <Link
           href="/"
           style={{
-            fontFamily: "'IBM Plex Mono', monospace",
+            fontFamily: "var(--font-mono)",
             fontSize: 10,
             color: "var(--muted)",
-            textDecoration: "none",
             display: "flex",
             alignItems: "center",
+            justifyContent: isCollapsed ? "center" : "flex-start",
             gap: 10,
           }}
         >
-          <span>🏠</span>
+          <span>EXIT</span>
           {!isCollapsed && <span>EXIT ADMIN</span>}
         </Link>
+        <button
+          type="button"
+          onClick={handleLogout}
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 10,
+            color: "var(--red)",
+            background: "transparent",
+            border: "1px solid var(--border)",
+            borderRadius: 3,
+            padding: isCollapsed ? "8px 0" : "8px 10px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: isCollapsed ? "center" : "flex-start",
+            gap: 10,
+            textTransform: "uppercase",
+          }}
+        >
+          <span>OUT</span>
+          {!isCollapsed && <span>LOGOUT</span>}
+        </button>
       </div>
     </aside>
   )

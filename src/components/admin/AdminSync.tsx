@@ -25,7 +25,7 @@ export default function AdminSync() {
     setLastResult(null)
 
     try {
-      const res = await fetch("/api/sync")
+      const res = await fetch("/api/admin/sync", { method: "POST" })
       const data: SyncResult = await res.json()
       setLastResult(data)
       setLog((prev) => [

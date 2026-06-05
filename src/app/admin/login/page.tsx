@@ -7,6 +7,19 @@ export default function AdminLoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  function isSafeAdminRedirect(url: string | null): boolean {
+    if (!url) return false
+    try {
+      if (/^[a-z][a-z0-9+\-.]*:/i.test(url)) return false
+      if (url.startsWith("//")) return false
+      if (url.includes("\\")) return false
+      const normalized = new URL(url, "http://localhost").pathname
+      return normalized === "/admin" || normalized.startsWith("/admin/")
+    } catch {
+      return false
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
@@ -25,7 +38,8 @@ export default function AdminLoginPage() {
       }
 
       const next = new URLSearchParams(window.location.search).get("next")
-      window.location.href = next && next.startsWith("/admin") ? next : "/admin"
+      const redirectTo = isSafeAdminRedirect(next) ? next : "/admin"
+      window.location.href = redirectTo || "/admin"
     } catch {
       setError("Unable to sign in right now")
     } finally {

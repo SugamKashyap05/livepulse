@@ -1,14 +1,23 @@
+import { prisma } from "@/lib/db"
 import { FEED_SOURCES } from "@/lib/sources"
 import HealthClient from "@/components/admin/HealthClient"
 
 export const dynamic = "force-dynamic"
 
-export default function HealthPage() {
-  const sources = FEED_SOURCES.map((s) => ({
-    name: s.name,
-    url: s.url,
-    topic: s.topic,
-  }))
+export default async function HealthPage() {
+  let dbSources = await prisma.feedSource.findMany({
+    where: { enabled: true },
+    orderBy: [{ topic: "asc" }, { priority: "desc" }],
+    select: { name: true, url: true, topic: true },
+  })
+
+  if (dbSources.length === 0) {
+    dbSources = FEED_SOURCES.map((source) => ({
+      name: source.name,
+      url: source.url,
+      topic: source.topic,
+    }))
+  }
 
   return (
     <div>
@@ -31,7 +40,7 @@ export default function HealthPage() {
           Live ping all RSS sources to check availability
         </p>
       </div>
-      <HealthClient sources={sources} />
+      <HealthClient sources={dbSources} />
     </div>
   )
 }

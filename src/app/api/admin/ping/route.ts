@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server"
 import { isAdminAuthorized } from "@/lib/adminAuth"
+import { prisma } from "@/lib/db"
 import { FEED_SOURCES } from "@/lib/sources"
 
-const ALLOWED_HOSTNAMES = new Set(
-  FEED_SOURCES.map((source) => new URL(source.url).hostname)
-)
+async function getAllowedHostnames() {
+  const dbSources = await prisma.feedSource.findMany({
+    where: { enabled: true },
+    select: { url: true },
+  })
+  const urls = dbSources.length > 0
+    ? dbSources.map((source) => source.url)
+    : FEED_SOURCES.map((source) => source.url)
+
+  return new Set(urls.map((url) => new URL(url).hostname))
+}
 
 export async function GET(request: Request) {
   if (!isAdminAuthorized(request)) {
@@ -24,9 +33,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid URL" }, { status: 400 })
   }
 
+  const allowedHostnames = await getAllowedHostnames()
+
   if (
     !["http:", "https:"].includes(parsedUrl.protocol) ||
-    !ALLOWED_HOSTNAMES.has(parsedUrl.hostname)
+    !allowedHostnames.has(parsedUrl.hostname)
   ) {
     return NextResponse.json(
       { error: "URL not in allowed sources" },
@@ -44,6 +55,7 @@ export async function GET(request: Request) {
     })
     return NextResponse.json({ ok: res.ok, status: res.status })
   } catch (error) {
-    return NextResponse.json({ ok: false, error: String(error) }, { status: 200 })
+    console.error("[admin ping] error:", error)
+    return NextResponse.json({ ok: false, error: "An error occurred" }, { status: 200 })
   }
 }

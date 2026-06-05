@@ -1,28 +1,43 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { MODELS, structuredChat } from "@/lib/ollama"
+import { MODELS, logAiAction, structuredChat } from "@/lib/ollama"
 
 export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
-    const { id, title, description, topic } = await request.json()
+    const { id } = await request.json()
 
-    if (!id || !title) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 })
+    if (!id) {
+      return NextResponse.json({ error: "Missing id" }, { status: 400 })
     }
 
-    const existing = await prisma.newsArticle.findUnique({
-      where: { id },
-      select: { aiTags: true },
+    const article = await prisma.newsArticle.findFirst({
+      where: { id, published: true },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        topic: true,
+        aiTags: true,
+      },
     })
 
-    if (existing?.aiTags) {
+    if (!article) {
+      return NextResponse.json(
+        { error: "Article not found" },
+        { status: 404 }
+      )
+    }
+
+    if (article.aiTags) {
       return NextResponse.json({
-        tags: JSON.parse(existing.aiTags),
+        tags: JSON.parse(article.aiTags),
         cached: true,
       })
     }
+
+    const { title, description, topic } = article
 
     const prompt = `Read this news article and provide 3-5 very specific keywords/tags (e.g., "Gaza", "NVIDIA", "Cricket World Cup").
         
@@ -38,6 +53,15 @@ Return as JSON: { "tags": ["tag1", "tag2", ...] }`
       response = await structuredChat<{ tags: string[] }>(prompt, MODELS.FAST)
     } catch (error) {
       console.error("[AI tag unavailable]:", error)
+      await logAiAction({
+        action: "tag",
+        model: MODELS.FAST,
+        prompt: prompt.slice(0, 200),
+        tokens: null,
+        ms: null,
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }).catch(() => {})
       return NextResponse.json(
         { error: "AI service unavailable", fallback: true },
         { status: 503 }
@@ -46,25 +70,25 @@ Return as JSON: { "tags": ["tag1", "tag2", ...] }`
     const ms = Date.now() - start
 
     await prisma.newsArticle.update({
-      where: { id },
+      where: { id: article.id },
       data: {
         aiTags: JSON.stringify(response.tags),
         aiProcessed: true,
       },
     })
 
-    // Log action
-    await prisma.aiLog.create({
-      data: {
-        action: "tag",
-        model: MODELS.FAST,
-        prompt: title.substring(0, 100),
-        ms,
-      }
+    await logAiAction({
+      action: "tag",
+      model: MODELS.FAST,
+      prompt: prompt.slice(0, 200),
+      tokens: null,
+      ms,
+      success: true,
     })
 
     return NextResponse.json({ tags: response.tags, cached: false })
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+    console.error("[ai tag] error:", error)
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }
 }

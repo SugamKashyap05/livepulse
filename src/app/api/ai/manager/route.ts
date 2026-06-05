@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server"
+import { isAdminAuthorized } from "@/lib/adminAuth"
 import { prisma } from "@/lib/db"
 import { MODELS, managerChat, logAiAction, OllamaMessage } from "@/lib/ollama"
 
 export const maxDuration = 60
 
 export async function POST(request: Request) {
+  if (!isAdminAuthorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   try {
     const { messages } = await request.json()
 
@@ -44,6 +49,15 @@ export async function POST(request: Request) {
       reply = await managerChat(messages as OllamaMessage[], context)
     } catch (error) {
       console.error("[AI manager unavailable]:", error)
+      await logAiAction({
+        action: "manager",
+        model,
+        prompt: JSON.stringify(context).slice(0, 200),
+        tokens: null,
+        ms: null,
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }).catch(() => {})
       return NextResponse.json(
         { error: "AI service unavailable", fallback: true },
         { status: 503 }
@@ -51,10 +65,18 @@ export async function POST(request: Request) {
     }
     const ms = Date.now() - start
 
-    await logAiAction("manager", model, ms)
+    await logAiAction({
+      action: "manager",
+      model,
+      prompt: JSON.stringify(context).slice(0, 200),
+      tokens: null,
+      ms,
+      success: true,
+    })
 
     return NextResponse.json({ reply, model })
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+    console.error("[ai manager] error:", error)
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }
 }
