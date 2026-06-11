@@ -1,5 +1,5 @@
-import crypto from "crypto"
 import { NextResponse } from "next/server"
+import { createAdminSession } from "@/lib/adminSessions"
 
 const AUTH_RESPONSE_DELAY_MS = 100
 const MAX_ATTEMPTS = 5
@@ -16,50 +16,6 @@ function delayAuthResponse() {
   return new Promise((resolve) => {
     setTimeout(resolve, AUTH_RESPONSE_DELAY_MS)
   })
-}
-
-export function createAdminSession(): string {
-  const adminSecret = process.env.ADMIN_SECRET
-  if (!adminSecret) throw new Error("Admin auth is not configured")
-
-  const nonce = crypto.randomBytes(32).toString("hex")
-  const expiresAt = Date.now() + 24 * 60 * 60 * 1000
-  const payload = `${nonce}.${expiresAt}`
-  const signature = crypto
-    .createHmac("sha256", adminSecret)
-    .update(payload)
-    .digest("hex")
-
-  return `${payload}.${signature}`
-}
-
-export function validateAdminSession(token: string): boolean {
-  const adminSecret = process.env.ADMIN_SECRET
-  if (!adminSecret) return false
-
-  const parts = token.split(".")
-  if (parts.length !== 3) return false
-
-  const [nonce, expiresAtRaw, signature] = parts
-  const expiresAt = Number(expiresAtRaw)
-  if (!nonce || !Number.isFinite(expiresAt) || expiresAt < Date.now()) {
-    return false
-  }
-
-  const payload = `${nonce}.${expiresAtRaw}`
-  const expected = crypto
-    .createHmac("sha256", adminSecret)
-    .update(payload)
-    .digest("hex")
-
-  try {
-    return crypto.timingSafeEqual(
-      Buffer.from(signature, "hex"),
-      Buffer.from(expected, "hex")
-    )
-  } catch {
-    return false
-  }
 }
 
 export async function POST(request: Request) {

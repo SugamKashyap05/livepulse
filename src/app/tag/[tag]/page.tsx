@@ -26,7 +26,7 @@ export default async function TagPage({
   return (
     <>
       <Header />
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
+      <main className="public-page-shell" style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
         <div style={{
           fontFamily: "'IBM Plex Mono', monospace",
           fontSize: 10,
@@ -36,7 +36,7 @@ export default async function TagPage({
         }}>
           TAG
         </div>
-        <h1 style={{
+        <h1 className="tag-page-title" style={{
           fontFamily: "'Playfair Display', serif",
           color: "var(--text)",
           margin: "0 0 32px",

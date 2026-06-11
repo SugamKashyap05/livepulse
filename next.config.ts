@@ -42,9 +42,22 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   /* config options here */
   poweredByHeader: false,
+  allowedDevOrigins: [
+    "*.ngrok-free.dev",
+    "*.ngrok-free.app",
+    "*.ngrok.io",
+    "*.ngrok.app",
+    "localhost",
+    "127.0.0.1",
+    "192.168.*.*",
+  ],
   reactCompiler: true,
   experimental: {},
   async headers() {
+    if (process.env.NODE_ENV === "development") {
+      return []
+    }
+
     return [
       {
         source: "/:path*",

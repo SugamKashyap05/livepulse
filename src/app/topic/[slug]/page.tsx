@@ -40,7 +40,7 @@ export default async function TopicPage({
   return (
     <>
       <Header />
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 24px" }}>
+      <main className="public-page-shell" style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 24px" }}>
         <div style={{
           marginBottom: 24,
           fontFamily: "'IBM Plex Mono', monospace",
@@ -74,32 +74,58 @@ function SentimentFilters({
   basePath: string
 }) {
   const filters = [
-    { label: "All", value: null },
-    { label: "Positive", value: "positive" },
-    { label: "Neutral", value: "neutral" },
-    { label: "Negative", value: "negative" },
+    { label: "ALL", value: null, dot: null },
+    { label: "POSITIVE", value: "positive", dot: "#3ecf8e" },
+    { label: "NEUTRAL", value: "neutral", dot: "#718096" },
+    { label: "NEGATIVE", value: "negative", dot: "#f56565" },
   ]
 
   return (
-    <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-      {filters.map((filter) => (
-        <Link
-          key={filter.label}
-          href={filter.value ? `${basePath}?sentiment=${filter.value}` : basePath}
-          style={{
-            fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 10,
-            padding: "4px 10px",
-            background: sentiment === filter.value ? "var(--accent)" : "var(--surface)",
-            color: sentiment === filter.value ? "#000" : "var(--muted)",
-            border: "1px solid var(--border)",
-            borderRadius: 3,
-            textDecoration: "none",
-          }}
-        >
-          {filter.label}
-        </Link>
-      ))}
+    <div
+      className="scroll-row feed-filter-row"
+      style={{ display: "flex", gap: 6, marginBottom: 24, flexWrap: "wrap" }}
+    >
+      {filters.map((filter) => {
+        const isActive = sentiment === filter.value ||
+          (filter.value === null && !sentiment)
+        return (
+          <Link
+            key={filter.label}
+            href={filter.value ? `${basePath}?sentiment=${filter.value}` : basePath}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontFamily: "var(--font-mono)",
+              fontSize: 9,
+              letterSpacing: "1px",
+              padding: "4px 10px",
+              background: isActive
+                ? "rgba(108,143,255,0.1)"
+                : "transparent",
+              color: isActive ? "var(--accent)" : "var(--muted)",
+              border: `1px solid ${isActive
+                ? "rgba(108,143,255,0.3)"
+                : "var(--border)"}`,
+              borderRadius: 20,
+              textDecoration: "none",
+              transition: "all 0.15s ease",
+            }}
+          >
+            {filter.dot && (
+              <span style={{
+                width: 5,
+                height: 5,
+                borderRadius: "50%",
+                background: isActive ? filter.dot : "var(--muted2)",
+                display: "inline-block",
+                flexShrink: 0,
+              }} />
+            )}
+            {filter.label}
+          </Link>
+        )
+      })}
     </div>
   )
 }

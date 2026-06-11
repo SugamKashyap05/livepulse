@@ -1,6 +1,6 @@
 # LivePulse Project Knowledge
 
-Last updated: 2026-06-05
+Last updated: 2026-06-07
 
 This file is the working project memory for LivePulse. Update it after every code edit so future work can start here before re-reading the full repository.
 
@@ -69,6 +69,117 @@ Do not write secret values into this file.
 - `vercel.json`: cron schedule hits `/api/sync` every 5 minutes.
 - `src/proxy.ts`: Next 16 Proxy auth gate for `/admin/:path*`, `/api/admin/:path*`, and user-only pages (`/profile`, `/onboarding`, `/bookmarks`, `/settings`). Admin routes use `ADMIN_SECRET`; user routes use Neon Auth when configured.
 - `src/instrumentation.ts`: when `NEXT_RUNTIME === "nodejs"` and `NODE_ENV === "development"`, dynamically imports `startAutoSync()` and starts a local server-side sync loop. Production relies on Vercel cron.
+
+## Recent UI Polish
+
+2026-06-07:
+
+- Public mobile readiness:
+  - Consulted `node_modules/next/dist/docs/01-app/01-getting-started/14-metadata-and-og-images.md` before changing viewport metadata.
+  - Added explicit `export const viewport` in `src/app/layout.tsx`, Google Fonts preconnects, `100dvh` body height, and cleaned the footer copyright mojibake.
+  - Expanded `src/app/globals.css` with mobile/tablet utilities: `-webkit-fill-available`, `100dvh`, `.scroll-row`, mobile-safe 16px inputs, touch-action hints, focus-visible styling, public header classes, article grid/card sizing, digest/search/auth/detail responsive rules, full-screen mobile chat overlay, safe-area offsets, and landscape phone handling.
+  - Added `src/components/MobileHeaderMenu.tsx` for the mobile public header dropdown with ARIA state, outside-click close, Escape close, and menu-link close behavior.
+  - Updated public surfaces to use the mobile classes: `Header`, home, topic, search, tag, bookmarks, digest, AI-news, news detail, login, signup, `TopicTabs`, `NewsGrid`, `NewsCard`, `ArticleFeed`-backed pages, `DigestClient`, `ChatAssistant`, and `ArticleAiPanel`.
+  - Feed card images now use `loading="lazy"` and `decoding="async"`; public detail hero images use `loading="eager"` and `decoding="async"` because they are above the fold.
+  - Article detail chat inputs scroll into view on focus to reduce keyboard overlap on mobile.
+  - Cleaned public mojibake scan: `rg -n "â|Â" src -g "*.tsx" -g "*.css"` returns no matches.
+  - Verification: `npx tsc --noEmit` passed and `npm run build` passed.
+  - `npm run lint` still fails on existing backlog: `src/app/admin/newsroom/page.tsx` `any`, dead `src/components/ChatWidget.tsx` apostrophes, `src/components/admin/AdminSidebar.tsx` set-state-in-effect, plus expected `<img>` warnings for arbitrary RSS images and the font-link warning.
+  - Browser/mobile screenshot QA was not completed because the in-app browser Node runtime crashed with `windows sandbox failed: spawn setup refresh`.
+- Mobile touch hotfix:
+  - `src/components/NewsCard.tsx` action controls now stop pointer/touch propagation as well as click propagation, so tapping bookmark/tags/mood/AI/tag chips on mobile does not accidentally activate the surrounding article/card interaction.
+  - NewsCard footer action buttons now use 44px minimum touch targets with inline-flex centering.
+  - Cleaned NewsCard footer mojibake glyphs for read marker, bookmark stars, and sentiment checkmark.
+  - Verification: `npx tsc --noEmit` passed and `npm run build` passed.
+- NewsCard strict mobile touch follow-up:
+  - Confirmed the `<article>` card has no `onClick`, `onTouchStart`, or `onTouchEnd`; changed the card cursor from pointer to default so only the title link presents as navigable.
+  - Updated summarize, sentiment, tag generation, and bookmark handlers to accept mouse or touch events and begin with `stopPropagation()` then `preventDefault()`.
+  - Added `card-image`, `card-footer`, `card-date`, and `card-action-btn` classes; footer actions have `touchAction: "manipulation"` and transparent iOS tap highlights.
+  - Added CSS to suppress full-card iOS tap flash/long-press callout, re-enable subtle tap highlights only on real card links/buttons, disable card hover/zoom effects on mobile, keep action buttons visible, and wrap the mobile footer into date row plus equal-width action row.
+  - Sentiment and AI image overlays now use `pointerEvents: "none"` and `userSelect: "none"` so they cannot steal taps.
+  - Verification: `npx tsc --noEmit` passed and `npm run build` passed.
+- Mobile frontend surgical fixes:
+  - `MobileHeaderMenu` now renders clean `☰` and `✕` glyphs instead of mojibake.
+  - `onboarding/page.tsx` now uses `100dvh`, clamp-based outer/panel padding, auto-fill 140px choice grids, and `onboarding-choice-grid` class hooks.
+  - `news/[id]/page.tsx` now uses clamp-based detail padding, clamp-based hero image height, responsive `agent-analysis-grid`, and an `article-cta-btn` hook for mobile full-width CTA behavior.
+  - `/ai-news` and `/ai-news/[id]` titles now use `fontSize: "clamp(24px, 5vw, 48px)"` instead of fixed 48px.
+  - `NewsCard` image fallback no longer assigns `wrapper.style.height = "180px"`, so CSS controls fallback height on mobile.
+  - `DigestClient` now exposes `digest-btn` and `digest-content-area` hooks; mobile CSS reduces digest padding and makes the generate button full-width/44px.
+  - `globals.css` mobile block now includes exact hero/page/header padding overrides plus article CTA, article hero, agent analysis, onboarding grid, and digest-specific overrides.
+  - Verification: `npx tsc --noEmit` passed after every changed file; final `npx tsc --noEmit` passed; `npm run build` passed; `rg -n "â|Â|Ã" src/app src/components -g "*.tsx"` returned no matches.
+- AI chat streaming:
+  - Added `ollamaChatStream()` in `src/lib/ollama.ts` for `/api/chat` streaming with newline-delimited JSON buffering.
+  - `/api/ai/manager`, `/api/ai/chat`, and `/api/ai/article-chat` now return SSE events: `start`, `token`, `done`, and `error`.
+  - `AiManagerClient`, `ChatAssistant`, and `ArticleAiPanel` now show immediate thinking dots, stream tokens into a live response bubble, keep input disabled until completion, show a blinking cursor while streaming, and auto-scroll as content arrives.
+  - Global `thinking-dot` and `cursor-blink` keyframes were added to `src/app/globals.css`.
+  - Local Next docs consulted before route/client edits:
+    - `node_modules/next/dist/docs/01-app/01-getting-started/15-route-handlers.md`
+    - `node_modules/next/dist/docs/01-app/01-getting-started/05-server-and-client-components.md`
+  - Verification: `npx tsc --noEmit` passed.
+
+2026-06-06:
+
+- RAG foundation:
+  - Added pgvector-backed `ArticleEmbedding` schema and migration for semantic article chunks.
+  - Added `src/lib/textSafety.ts` for shared AI/RAG sanitization: decode entities, strip tags/angle brackets, redact prompt-injection patterns, and cap text length.
+  - Added `embedText()` in `src/lib/ollama.ts` using `OLLAMA_EMBED_MODEL` (`nomic-embed-text` by default), a 5-minute SHA-256 keyed embedding cache, vector length validation, and AiLog failure logging.
+  - Added `src/lib/rag.ts` with article chunking, SHA-256 content hashes, indexing helpers, pgvector retrieval, article deduplication, XML-style retrieved context, and citation extraction.
+  - Added admin RAG APIs:
+    - `POST /api/admin/rag/reindex` supports `missing`, `recent`, `article`, and `all` modes with inline admin auth and a hard limit cap of 100.
+    - `GET /api/admin/rag/status` returns coverage, chunk count, embedding model, latest index time, and last error.
+  - Added `RagAdminPanel` to `/admin/ai-manager` for status and reindex actions.
+  - `/api/ai/chat` and `/api/ai/article-chat` now try RAG first, use `MODELS.CHAT`, return `contextStats`, enforce 10 requests/minute/IP, and fall back to the previous Prisma latest/topic context when embeddings are unavailable.
+  - `/api/sync` and development autosync trigger non-blocking background reindex of missing embeddings after RSS sync; dev autosync also warms the embedding model after the first successful sync.
+
+- Article chat context expansion:
+  - Replaced `POST /api/ai/article-chat` with a richer article context engine: focus article, 10 same-topic recent articles, and 5 global headlines from different topics.
+  - Removed the restrictive article-chat system prompt wording that told the model to answer only from the single article excerpt.
+  - `ArticleAiPanel` now sends both `articleId` and `topic` to `/api/ai/article-chat`, and its visible chat copy now reflects related coverage and broader headlines.
+  - `/api/ai/chat` now retrieves 25 published articles, includes `description`, `pubDate`, and `sentiment`, and uses softer out-of-context wording that offers related available coverage.
+  - Known limitation documented: this is topic-filtered Prisma context retrieval, not semantic vector RAG or ChromaDB.
+  - Local Next docs consulted before route/client edits:
+    - `node_modules/next/dist/docs/01-app/01-getting-started/15-route-handlers.md`
+    - `node_modules/next/dist/docs/01-app/01-getting-started/05-server-and-client-components.md`
+
+- Chat UI contrast fix:
+  - `src/components/ArticleAiPanel.tsx`: article-aware chat now uses high-contrast assistant and user bubbles, formatted AI response rendering for bullets/headings, connected input/button styling, and dimmer helper/header text.
+  - `src/components/ChatAssistant.tsx`: global floating chat was rebuilt with the same high-contrast bubble system, formatted assistant responses, connected input/button styling, and a cleaner ASCII floating trigger.
+  - Assistant response body text now uses `var(--text)` instead of muted/accent color; accent is reserved for borders, bullets, controls, and labels.
+  - Verification: `npx tsc --noEmit` passed.
+- Bluewall v2 security remediation:
+  - `src/lib/adminSessions.ts` now issues stateless signed 64-character admin session tokens; `admin_token` no longer stores the raw `ADMIN_SECRET`.
+  - `src/lib/adminAuth.ts` validates admin cookies through `validateAdminSession()` and still accepts `Authorization: Bearer <ADMIN_SECRET>` for admin API automation.
+  - `src/app/api/admin/logout/route.ts` clears the admin session cookie.
+  - `src/app/api/ai/chat/route.ts` and `src/app/api/ai/article-chat/route.ts` filter client chat messages to `user`/`assistant`, strip angle brackets, and cap message content at 2000 chars.
+  - `src/app/api/ai/summarize/route.ts`, `src/app/api/ai/sentiment/route.ts`, and `src/app/api/ai/tag/route.ts` use client-provided `id` only, then fetch published article title/description/topic from Prisma for prompts.
+  - `src/lib/fetchFeeds.ts` decodes HTML entities before stripping tags, removes remaining angle brackets, redacts prompt-injection patterns, and truncates descriptions at 500 chars.
+  - `/api/sync` no longer has a development bypass when `CRON_SECRET` exists.
+  - `/api/admin/purge` clamps `days` to `1..365` and returns a preview unless `confirm=true` is present.
+  - `/api/ai/batch` caps `limit` to `1..50`, defaulting invalid values to 20.
+  - API route handlers no longer return `String(error)` / `String(e)` in JSON responses.
+  - Verification: source scans for raw cookie comparison, `String(error)`, stale digest env names, and sync `isDev` bypass passed; `npx tsc --noEmit` passed.
+- Admin settings React warning fix:
+  - `src/components/admin/SettingsClient.tsx` now sets the sync interval selection with `defaultValue="5"` on `<select>` instead of `selected` on an `<option>`.
+  - Verification: no `<option selected>` matches remain in `src/**/*.tsx`; `npx tsc --noEmit` passed.
+
+2026-06-05:
+
+- AI typography refresh:
+  - `src/app/layout.tsx`: Google Fonts request now includes Inter.
+  - `src/app/globals.css`: added `--font-ai` for modern AI-generated prose.
+  - `src/components/ArticleAiPanel.tsx`: summary bullets, helper text, article-aware chat bubbles, and chat input now use `var(--font-ai)` with more readable spacing/weight.
+  - `src/components/ChatAssistant.tsx`: floating AI chat message bubbles and input now use `var(--font-ai)`.
+  - `src/components/DigestClient.tsx`: digest body now uses `var(--font-ai)` instead of the missing/old `IBM Plex Sans` reference.
+  - `src/components/NewsCard.tsx`: inline card AI summaries now use `var(--font-ai)` instead of mono.
+  - Verification: `npx tsc --noEmit` passed.
+- Phase 2 screenshot polish applied surgically:
+  - `src/app/page.tsx`: tightened hero strip padding to `32px 32px 20px`, reduced article section top padding to 20px, strengthened the subtle blue radial glow, moved the stats line above filters, and changed sentiment filters to small pill chips.
+  - `src/app/globals.css`: brightened dark surface/border tokens and added CSS suppression for Neon Auth floating dev widgets.
+  - `src/components/NewsCard.tsx`: added card gradient depth, persistent/hover shadows, `minHeight: 420`, top-biased image positioning, and textured no-image fallback.
+  - `src/components/NewsGrid.tsx`: changed public grid columns to `repeat(auto-fill, minmax(340px, 1fr))` with 24px gaps.
+  - `src/components/TopicTabs.tsx`: active topic tabs now use the same subtle accent-tint pill treatment as filters.
+  - `src/app/topic/[slug]/page.tsx`: topic-page sentiment filters now match the home page chip styling.
+- Verification: read Next 16 dynamic route docs before touching `src/app/topic/[slug]/page.tsx`; `npx tsc --noEmit` passed after each fix and after the final sweep. Browser screenshot verification could not run because the in-app browser runtime failed with `spawn setup refresh`.
 
 ## Data Model
 
@@ -273,12 +384,12 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
   - Shared auth predicate lives in `src/lib/adminAuth.ts`.
   - Protects `/admin/:path*` and `/api/admin/:path*`.
   - Allows `/admin/login` and `/api/admin/auth`.
-  - Accepts `Authorization: Bearer <ADMIN_SECRET>` or `admin_token=<ADMIN_SECRET>` cookie.
+  - Accepts `Authorization: Bearer <ADMIN_SECRET>` or an `admin_token` signed session cookie validated by `src/lib/adminSessions.ts`.
   - Unauthorized admin pages redirect to `/admin/login?next=<path>`.
   - Unauthorized admin APIs return `401 { "error": "Unauthorized" }`.
 - `/admin/login`
   - Client login form that posts `{ password }` to `/api/admin/auth`.
-  - Successful auth sets an httpOnly `admin_token` cookie and redirects to requested admin page or `/admin`.
+  - Successful auth sets an httpOnly random-session `admin_token` cookie and redirects to requested admin page or `/admin`.
 - `/admin`
   - Dashboard with total articles, added today, active sources, topics covered, sync control, AI batch processor, and topic/source counts.
 - `/admin/articles`
@@ -369,6 +480,7 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
 
 ## Known Issues / Sharp Edges
 
+- Article chat uses topic-filtered Prisma queries for context retrieval (Layer 1: focus article, Layer 2: same-topic recent articles, Layer 3: global headlines). True semantic RAG via ChromaDB is not yet implemented. Questions about articles outside the current topic may not have full context.
 - `SECURITY_REPORT.md` is the current security-measures audit report. As of 2026-06-03, the previously confirmed code gaps are fixed:
   - `/api/ai/manager` now returns `401` without admin auth.
   - `/api/ai/newsroom/activity` now returns `401` without admin auth, and the active admin UI route is `/api/admin/ai/newsroom/activity`.
@@ -413,7 +525,7 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
   - `src/lib/fetchFeeds.ts` now decodes HTML entities before tag stripping, strips remaining angle brackets, redacts common prompt-injection phrases, exports `cleanDescription()`, and applies similar cleaning to RSS titles.
   - `/api/ai/chat` now validates topics, strips client-supplied `system` roles, caps message length, keeps only the latest 20 messages, and strips angle brackets from client message content.
   - `src/lib/agents.ts` now sanitizes article titles, sources, and descriptions before constructing Scout, Fact-Checker, and Spin-Doctor prompts.
-  - Admin auth no longer stores the raw `ADMIN_SECRET` in `admin_token`; login now creates a signed opaque session token, while bearer auth still accepts `ADMIN_SECRET` for CLI/server use.
+  - Admin auth no longer stores the raw `ADMIN_SECRET` in `admin_token`; login now creates a stateless signed 64-character session token, while bearer auth still accepts `ADMIN_SECRET` for CLI/server use.
   - Admin login now validates request JSON, rejects invalid password shapes/oversized passwords, adds a constant 100ms response delay, and locks out a client IP after repeated failures.
   - Added `POST /api/admin/logout`, and `AdminSidebar` now includes a logout action that clears the admin cookie and redirects to `/admin/login`.
   - `DELETE /api/admin/purge` now clamps `days` to `1..365`, requires `confirm=true` to delete, previews deletion counts otherwise, and only purges non-AI articles by `fetchedAt`.
@@ -536,7 +648,7 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
     - Changed `POST /api/user/read` to return `401 { "error": "Unauthorized" }` when no Neon Auth user id is available, matching the other `/api/user/*` routes.
     - Appended the 2026-06-03 gap update to `SECURITY_REPORT.md`, covering batch auth, rate limiting, admin brute-force hardening, digest env names, RSS prompt-injection mitigation, search published filtering, user null guards, AutoSync bootstrap behavior, seed-sources auth, and newsroom process auth.
     - Appended matching fix entries and updated acceptance criteria to `SECURITY_REMEDIATION_PLAN.md`.
-    - Items still deferred post-launch: rate limiting for public AI routes, replacing the raw `ADMIN_SECRET` session cookie with a signed session token, and prompt-injection pattern detection for RSS descriptions.
+    - Items still deferred post-launch: rate limiting for public AI routes and replacing the single-admin secret scheme with role-based admin auth for multi-admin production.
   - RSS article detail pages:
     - Added `src/app/news/[id]/page.tsx` using the Next.js 16 promised `params` pattern from `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/dynamic-routes.md`.
     - Published RSS articles now have internal detail pages with source badge, excerpt, optional AI summary/tags/agent analysis, related articles, and a CTA to the original publisher in a new tab.
@@ -587,6 +699,41 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
   - Authenticated `GET /api/admin/ping?url=https://feeds.bbci.co.uk/news/world/rss.xml` returned `200`.
   - Authenticated `DELETE /api/admin/articles` without target or `confirm=true` returned `400`.
   - Browser smoke check confirmed `/admin` redirects to login and the login heading is visible.
+
+2026-06-07:
+
+- Admin AI post-implementation audit fixes:
+  - Added `src/lib/adminJobSchemas.ts` with strict Zod validation for `newsroom_cycle`, `rag_reindex`, `ai_batch`, and `digest_generate`; `/api/admin/ai/jobs` validates params server-side before creating jobs.
+  - Added root `zod` dependency declaration and kept the lockfile consistent with the already-installed local package.
+  - Added `progress` and `phase` to `AdminAiJob`, plus `status`, `type/status`, and notification status/createdAt indexes through migration `20260607152035_add_job_progress_phase`.
+  - Prisma again dropped the manual RAG HNSW vector index during migration, so `20260607152100_restore_article_embedding_hnsw_idx` restores it.
+  - Added `/api/admin/notifications/read` and tightened `/api/admin/notifications` to return the last 20 rows, count unread by `status`, and fire-and-forget delete read notifications older than 7 days.
+  - `/api/admin/ai/jobs/run-next` now accepts admin auth or `CRON_SECRET` bearer auth, resets stale running jobs older than 120 seconds, deletes completed/failed jobs older than 7 days, and deletes manager chat messages older than 30 days.
+  - Admin notification polling now redirects to `/admin/login?next=/admin` on `401`, uses recursive timeout polling with backoff from 5s to 30s, and only calls `run-next` when queued/running jobs exist.
+  - AI Manager chat history loads only the latest 50 messages; job-message polling uses `/api/admin/ai/manager/messages?after=...` and appends job assistant messages without refreshing.
+  - AI Manager action cards now have dedicated client state: cleared on new user message, retained after stream end, and cleared after a job is successfully created; `409` duplicate job responses show “This task is already running...”.
+  - Manager route now saves user and assistant messages server-side, sends only the last 10 messages to Ollama, includes explicit action-card/task-execution prompt rules, parses `[ACTION: ...]` markers into action-card SSE events, and strips markers from displayed/persisted text.
+  - `newsroom_cycle` now runs as resumable phases: `scout`, `fact_check`, and `spin_doctor`; partial phases requeue the job and update `progress`/`phase`, allowing jobs over 60 seconds to continue across `run-next` invocations. Vercel Pro users can keep `maxDuration: 300`, but Hobby deployments still rely on phase splitting and cron/admin polling recovery.
+  - Job failure messages now map common errors to helpful admin-facing text for Ollama down, missing model, and timeout/abort cases.
+  - Verification: unauthenticated jobs/notifications/run-next/manager-messages returned `401`; invalid params returned `400`; duplicate newsroom job returned first `200`, second `409`; digest job completed and `/api/admin/ai/manager/messages?after=...` returned “Today's digest has been generated. View it at /digest.”; cleanup count for completed/failed jobs older than 7 days was `0`; active admin AI job count was `0`; `npx tsc --noEmit` passed; `npm run build` passed.
+- Admin AI follow-up hotfix:
+  - Moved the admin notification bell into a sticky top admin header so it stays visible even when the sidebar is collapsed or scrolled.
+  - Added an AI Manager “ACTIVE AI TASKS” strip with current queued/running jobs and a `CHECK / RESUME` button.
+  - Newsroom scout jobs now emit progress chat/notification messages during scout generation and article review instead of only saying “started.”
+  - Reduced the v1 newsroom review batch to 3 articles, made individual article-review errors non-fatal, and added an Ollama chat timeout so jobs do not loop forever on a hung agent call.
+  - Added a duplicate active-job guard so clicking the same task again reuses the active job instead of launching another scout.
+  - Marked the two previously looping `newsroom_cycle` jobs as failed with explicit manager chat and notification messages; active admin AI job count verified as 0.
+  - Verification: `npx tsc --noEmit` passed.
+- Admin AI task follow-up system:
+  - Added DB-backed `AdminAiJob`, `AdminNotification`, and `ManagerChatMessage` models for queued/running/completed/failed admin AI work, in-app notifications, and persistent AI Manager chat history.
+  - Added `src/lib/adminAiJobs.ts` with explicit job creation and execution for `newsroom_cycle`, `rag_reindex`, `ai_batch`, and `digest_generate`; job transitions now write both notifications and manager chat messages.
+  - Added `/api/admin/ai/jobs`, `/api/admin/ai/jobs/run-next`, `/api/admin/notifications`, and `/api/admin/ai/manager/messages`, all protected by `isAdminAuthorized`.
+  - Updated `/api/ai/manager` to keep SSE streaming but return structured `action_card` events; the system prompt now forbids “I started” / “I will notify you” claims unless a real clicked job exists.
+  - Updated AI Manager UI to load persisted chat, render action cards, queue jobs from card clicks, and poll persisted manager messages so completion/failure messages appear after the original chat stream ends.
+  - Wrapped the admin shell in `AdminNotificationProvider` and added a sidebar notification bell/dropdown polling `/api/admin/notifications` every 5 seconds; queued/running notifications trigger `run-next` recovery while admin is open.
+  - Consulted local Next docs at `node_modules/next/dist/docs/01-app/03-api-reference/04-functions/after.md` before using `after()` in the jobs API.
+  - Prisma migration `20260607052740_add_admin_ai_jobs_notifications` was created/applied; it dropped the manually managed RAG HNSW index, so corrective migration `20260607052900_restore_article_embedding_hnsw_idx` recreates `ArticleEmbedding_embedding_hnsw_idx`.
+  - Verification: `npx prisma migrate dev --name add-admin-ai-jobs-notifications` applied the admin models; `npx prisma migrate deploy` applied the corrective index migration; `npx prisma generate` passed after stopping the local Next dev server that held Prisma's DLL lock; `npx tsc --noEmit` passed.
 
 2026-06-01:
 

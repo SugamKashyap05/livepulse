@@ -26,6 +26,7 @@ function normalizeSourceInput(body: Record<string, unknown>) {
   const slug = String(body.slug || topic).trim().toLowerCase()
   const region = String(body.region || "global").trim().toLowerCase()
   const priority = Number(body.priority ?? 0)
+  const fetchIntervalMinutes = Number(body.fetchIntervalMinutes ?? 30)
   const validTopics = ALL_TOPICS.filter((topic) => topic.slug !== "all").map(
     (topic) => topic.slug
   )
@@ -57,9 +58,12 @@ function normalizeSourceInput(body: Record<string, unknown>) {
       url,
       topic,
       slug,
-      region,
-      priority: Number.isFinite(priority) ? Math.max(0, Math.min(10, priority)) : 0,
-    },
+        region,
+        priority: Number.isFinite(priority) ? Math.max(0, Math.min(10, priority)) : 0,
+        fetchIntervalMinutes: Number.isFinite(fetchIntervalMinutes)
+          ? Math.max(5, Math.min(1440, Math.round(fetchIntervalMinutes)))
+          : 30,
+      },
   }
 }
 
@@ -105,10 +109,27 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "id required" }, { status: 400 })
   }
 
-  const data: Record<string, string | number | boolean | null> = {}
+  const data: Record<string, string | number | boolean | Date | null> = {}
   if ("enabled" in body) data.enabled = Boolean(body.enabled)
   if ("lastStatus" in body) data.lastStatus = body.lastStatus ? String(body.lastStatus) : null
   if ("failCount" in body) data.failCount = Number(body.failCount)
+  if ("fetchIntervalMinutes" in body) {
+    const interval = Number(body.fetchIntervalMinutes)
+    if (Number.isFinite(interval)) {
+      data.fetchIntervalMinutes = Math.max(5, Math.min(1440, Math.round(interval)))
+    }
+  }
+  if ("lastErrorMessage" in body) {
+    data.lastErrorMessage = body.lastErrorMessage
+      ? String(body.lastErrorMessage).slice(0, 500)
+      : null
+  }
+  if ("lastErrorAt" in body) {
+    data.lastErrorAt =
+      typeof body.lastErrorAt === "string" && !Number.isNaN(Date.parse(body.lastErrorAt))
+        ? new Date(body.lastErrorAt)
+        : null
+  }
 
   const editableFields = ["name", "url", "topic", "slug", "region", "priority"]
   if (editableFields.some((field) => field in body)) {

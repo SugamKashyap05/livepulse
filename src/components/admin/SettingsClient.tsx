@@ -104,10 +104,11 @@ export default function SettingsClient({
         <div style={{ marginBottom: 24 }}>
           <label style={labelStyle}>Sync Interval</label>
           <select
+            defaultValue="5"
             style={{ ...inputStyle, cursor: "pointer" }}
           >
             <option value="1" style={{ background: "var(--surface)" }}>Every 1 minute</option>
-            <option value="5" selected style={{ background: "var(--surface)" }}>Every 5 minutes</option>
+            <option value="5" style={{ background: "var(--surface)" }}>Every 5 minutes</option>
             <option value="10" style={{ background: "var(--surface)" }}>Every 10 minutes</option>
             <option value="30" style={{ background: "var(--surface)" }}>Every 30 minutes</option>
             <option value="60" style={{ background: "var(--surface)" }}>Every hour</option>

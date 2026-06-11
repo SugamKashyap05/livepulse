@@ -9,7 +9,7 @@ type NewsGridProps = {
 export default function NewsGrid({ articles, loading = false }: NewsGridProps) {
   if (loading) {
     return (
-      <div style={gridStyle}>
+      <div className="article-grid" style={gridStyle}>
         {Array.from({ length: 6 }, (_, index) => (
           <div
             key={index}
@@ -47,7 +47,7 @@ export default function NewsGrid({ articles, loading = false }: NewsGridProps) {
   }
 
   return (
-    <div style={gridStyle}>
+    <div className="article-grid" style={gridStyle}>
       {articles.map((item) => (
         <NewsCard key={item.id} item={item} />
       ))}
@@ -57,8 +57,8 @@ export default function NewsGrid({ articles, loading = false }: NewsGridProps) {
 
 const gridStyle = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-  gap: 20,
+  gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
+  gap: 24,
 } as const
 
 const skeletonLineStyle = {

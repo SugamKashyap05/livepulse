@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
+const MAX_CONSECUTIVE_FEED_ERRORS = 5
 
 export async function POST(request: Request) {
   if (!isAdminAuthorized(request)) {
@@ -33,20 +34,37 @@ export async function POST(request: Request) {
         lastFetched: null,
         lastStatus: null,
         failCount: 0,
+        fetchIntervalMinutes: 30,
+        lastErrorAt: null,
+        lastErrorMessage: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       }))
     }
 
-    const { articles, successNames, failedNames } =
-      await fetchFeedsWithStatus(dbSources)
+    const now = Date.now()
+    dbSources = dbSources.filter((source) => {
+      if (!source.lastFetched) return true
+      const intervalMs = source.fetchIntervalMinutes * 60 * 1000
+      return now - source.lastFetched.getTime() >= intervalMs
+    })
 
-    if (articles.length === 0) {
+    if (dbSources.length === 0) {
       return NextResponse.json({
-        success: false,
-        message: "No articles fetched",
+        success: true,
+        saved: 0,
+        skipped: 0,
+        total: 0,
+        message: "No sources are due for fetching yet.",
+        sources: {
+          ok: 0,
+          failed: 0,
+        },
       })
     }
+
+    const { articles, successNames, failedNames, failedSources } =
+      await fetchFeedsWithStatus(dbSources)
 
     const slugMap = Object.fromEntries(
       dbSources.map((source) => [source.name, source.slug])
@@ -95,6 +113,50 @@ export async function POST(request: Request) {
       }
     }
 
+    if (successNames.length > 0) {
+      await prisma.feedSource.updateMany({
+        where: { name: { in: successNames } },
+        data: {
+          lastFetched: new Date(),
+          lastStatus: "ok",
+          failCount: 0,
+          lastErrorAt: null,
+          lastErrorMessage: null,
+        },
+      })
+    }
+
+    if (failedNames.length > 0) {
+      for (const failedSource of failedSources) {
+        const current = dbSources.find((source) => source.name === failedSource.name)
+        const nextFailCount = (current?.failCount ?? 0) + 1
+        await prisma.feedSource.updateMany({
+          where: { name: failedSource.name },
+          data: {
+            enabled: nextFailCount < MAX_CONSECUTIVE_FEED_ERRORS,
+            lastStatus: "error",
+            failCount: { increment: 1 },
+            lastErrorAt: new Date(),
+            lastErrorMessage:
+              nextFailCount >= MAX_CONSECUTIVE_FEED_ERRORS
+                ? `Disabled after ${nextFailCount} consecutive errors: ${failedSource.error}`
+                : failedSource.error,
+          },
+        })
+      }
+    }
+
+    if (articles.length === 0) {
+      return NextResponse.json({
+        success: false,
+        message: "No articles fetched",
+        sources: {
+          ok: successNames.length,
+          failed: failedNames.length,
+        },
+      })
+    }
+
     await prisma.newsArticle.deleteMany({
       where: {
         fetchedAt: {
@@ -102,23 +164,6 @@ export async function POST(request: Request) {
         },
       },
     })
-
-    if (successNames.length > 0) {
-      await prisma.feedSource.updateMany({
-        where: { name: { in: successNames } },
-        data: { lastFetched: new Date(), lastStatus: "ok", failCount: 0 },
-      })
-    }
-
-    if (failedNames.length > 0) {
-      await prisma.feedSource.updateMany({
-        where: { name: { in: failedNames } },
-        data: {
-          lastStatus: "error",
-          failCount: { increment: 1 },
-        },
-      })
-    }
 
     console.log(`[LivePulse] Admin sync done - saved: ${saved}, skipped: ${skipped}`)
 

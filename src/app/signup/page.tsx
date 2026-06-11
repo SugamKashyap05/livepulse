@@ -48,7 +48,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           : null
 
   return (
-    <main style={authShellStyle}>
+    <main className="auth-shell" style={authShellStyle}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <Link href="/" style={wordmarkStyle}>
           LivePulse
@@ -65,7 +65,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           Create Your Account
         </p>
 
-        <form action={signUpAction} style={formCardStyle}>
+        <form action={signUpAction} className="auth-card" style={formCardStyle}>
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Name</label>
             <input
@@ -121,7 +121,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
 }
 
 const authShellStyle = {
-  minHeight: "100vh",
+  minHeight: "100dvh",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

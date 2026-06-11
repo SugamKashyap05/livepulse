@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server"
 import { fetchFeedsWithStatus } from "@/lib/fetchFeeds"
 import { prisma } from "@/lib/db"
+import { triggerRagReindex } from "@/lib/ragReindexTrigger"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
+const MAX_CONSECUTIVE_FEED_ERRORS = 5
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization")
@@ -34,23 +36,36 @@ export async function GET(request: Request) {
         region: source.region || "global",
         enabled: true,
         priority: source.priority || 5,
+        fetchIntervalMinutes: 30,
         lastFetched: null,
         lastStatus: null,
         failCount: 0,
+        lastErrorAt: null,
+        lastErrorMessage: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       }))
     }
 
-    const { articles, successNames, failedNames } =
-      await fetchFeedsWithStatus(dbSources)
+    const now = Date.now()
+    dbSources = dbSources.filter((source) => {
+      if (!source.lastFetched) return true
+      return now - source.lastFetched.getTime() >= source.fetchIntervalMinutes * 60 * 1000
+    })
 
-    if (articles.length === 0) {
+    if (dbSources.length === 0) {
       return NextResponse.json({
-        success: false,
-        message: "No articles fetched",
+        success: true,
+        saved: 0,
+        skipped: 0,
+        total: 0,
+        message: "No sources are due for fetching yet.",
+        sources: { ok: 0, failed: 0 },
       })
     }
+
+    const { articles, successNames, failedNames, failedSources } =
+      await fetchFeedsWithStatus(dbSources)
 
     const slugMap = Object.fromEntries(
       dbSources.map((source) => [source.name, source.slug])
@@ -99,6 +114,50 @@ export async function GET(request: Request) {
       }
     }
 
+    if (successNames.length > 0) {
+      await prisma.feedSource.updateMany({
+        where: { name: { in: successNames } },
+        data: {
+          lastFetched: new Date(),
+          lastStatus: "ok",
+          failCount: 0,
+          lastErrorAt: null,
+          lastErrorMessage: null,
+        },
+      })
+    }
+
+    if (failedNames.length > 0) {
+      for (const failedSource of failedSources) {
+        const current = dbSources.find((source) => source.name === failedSource.name)
+        const nextFailCount = (current?.failCount ?? 0) + 1
+        await prisma.feedSource.updateMany({
+          where: { name: failedSource.name },
+          data: {
+            enabled: nextFailCount < MAX_CONSECUTIVE_FEED_ERRORS,
+            lastStatus: "error",
+            failCount: { increment: 1 },
+            lastErrorAt: new Date(),
+            lastErrorMessage:
+              nextFailCount >= MAX_CONSECUTIVE_FEED_ERRORS
+                ? `Disabled after ${nextFailCount} consecutive errors: ${failedSource.error}`
+                : failedSource.error,
+          },
+        })
+      }
+    }
+
+    if (articles.length === 0) {
+      return NextResponse.json({
+        success: false,
+        message: "No articles fetched",
+        sources: {
+          ok: successNames.length,
+          failed: failedNames.length,
+        },
+      })
+    }
+
     await prisma.newsArticle.deleteMany({
       where: {
         fetchedAt: {
@@ -107,24 +166,8 @@ export async function GET(request: Request) {
       },
     })
 
-    if (successNames.length > 0) {
-      await prisma.feedSource.updateMany({
-        where: { name: { in: successNames } },
-        data: { lastFetched: new Date(), lastStatus: "ok", failCount: 0 },
-      })
-    }
-
-    if (failedNames.length > 0) {
-      await prisma.feedSource.updateMany({
-        where: { name: { in: failedNames } },
-        data: {
-          lastStatus: "error",
-          failCount: { increment: 1 },
-        },
-      })
-    }
-
     console.log(`[LivePulse] Sync done - saved: ${saved}, skipped: ${skipped}`)
+    triggerRagReindex(new URL(request.url).origin)
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { NewsItem } from "@/types/news"
 import { getInternalArticleLink } from "@/lib/articleLinks"
 
@@ -46,6 +46,13 @@ const SENTIMENT_CONFIG = {
   neutral: { color: "var(--neutral)", label: "Neutral" },
 }
 
+function canUseHover() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(hover: hover) and (pointer: fine)").matches
+  )
+}
+
 export interface NewsItemWithAI extends NewsItem {
   summary?: string
   sentiment?: string
@@ -68,7 +75,7 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
   const [bookmarked, setBookmarked] = useState<boolean>(item.isBookmarked ?? false)
   const [showSummary, setShowSummary] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
-
+  const lastTouchActivationAt = useRef(0)
   const [aiTags, setAiTags] = useState<string[]>(() => {
     try {
       return item.aiTags ? JSON.parse(item.aiTags) : []
@@ -77,9 +84,29 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
     }
   })
 
-  async function handleSummarize(e: React.MouseEvent) {
-    e.preventDefault()
+  function shouldIgnoreFollowUpClick(
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.PointerEvent<HTMLButtonElement>
+      | React.TouchEvent<HTMLButtonElement>
+  ) {
+    if (e.type === "pointerup" || e.type === "touchend") {
+      lastTouchActivationAt.current = Date.now()
+      return false
+    }
+
+    return Date.now() - lastTouchActivationAt.current < 700
+  }
+
+  async function handleSummarize(
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.PointerEvent<HTMLButtonElement>
+      | React.TouchEvent<HTMLButtonElement>
+  ) {
     e.stopPropagation()
+    e.preventDefault()
+    if (shouldIgnoreFollowUpClick(e)) return
 
     if (summary) {
       setShowSummary((v) => !v)
@@ -114,9 +141,15 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
     }
   }
 
-  async function handleSentiment(e: React.MouseEvent) {
-    e.preventDefault()
+  async function handleSentiment(
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.PointerEvent<HTMLButtonElement>
+      | React.TouchEvent<HTMLButtonElement>
+  ) {
     e.stopPropagation()
+    e.preventDefault()
+    if (shouldIgnoreFollowUpClick(e)) return
 
     if (sentiment) return
 
@@ -145,9 +178,15 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
     }
   }
 
-  async function handleGenerateTags(e: React.MouseEvent) {
-    e.preventDefault()
+  async function handleGenerateTags(
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.PointerEvent<HTMLButtonElement>
+      | React.TouchEvent<HTMLButtonElement>
+  ) {
     e.stopPropagation()
+    e.preventDefault()
+    if (shouldIgnoreFollowUpClick(e)) return
 
     if (aiTags.length > 0 || loadingTags) return
 
@@ -179,9 +218,15 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
     }
   }
 
-  async function handleBookmark(e: React.MouseEvent) {
-    e.preventDefault()
+  async function handleBookmark(
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.PointerEvent<HTMLButtonElement>
+      | React.TouchEvent<HTMLButtonElement>
+  ) {
     e.stopPropagation()
+    e.preventDefault()
+    if (shouldIgnoreFollowUpClick(e)) return
 
     const method = bookmarked ? "DELETE" : "POST"
     try {
@@ -193,9 +238,18 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
 
       if (response.ok) {
         setBookmarked((value) => !value)
+        setAiError(null)
+        return
       }
+
+      if (response.status === 401) {
+        setAiError("Sign in to save bookmarks.")
+        return
+      }
+
+      setAiError("Could not update bookmark right now.")
     } catch {
-      // Bookmarking is user-only; logged-out or transient failures should not break the card.
+      setAiError("Could not update bookmark right now.")
     }
   }
 
@@ -207,32 +261,45 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
     }).catch(() => {})
   }
 
+  function handleTouchAction<T extends HTMLButtonElement>(
+    event: React.PointerEvent<T> | React.TouchEvent<T>,
+    action: (event: React.PointerEvent<T> | React.TouchEvent<T>) => void | Promise<void>
+  ) {
+    if ("pointerType" in event && event.pointerType === "mouse") return
+    void action(event)
+  }
+
   const sentimentCfg =
     SENTIMENT_CONFIG[sentiment as keyof typeof SENTIMENT_CONFIG]
 
   return (
     <article
+      className="news-card"
       style={{
-        background: "var(--surface)",
+        background: "linear-gradient(180deg, #161620 0%, #121218 100%)",
         border: "1px solid var(--border)",
         borderRadius: 8,
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
+        minHeight: 420,
         transition: "border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease",
-        cursor: "pointer",
+        cursor: "default",
         opacity: item.isRead ? 0.55 : 1,
         position: "relative",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03)",
       }}
       onMouseEnter={(event) => {
+        if (!canUseHover()) return
         event.currentTarget.style.borderColor = "var(--border2)"
         event.currentTarget.style.transform = "translateY(-2px)"
-        event.currentTarget.style.boxShadow = "var(--shadow-md)"
+        event.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.04)"
       }}
       onMouseLeave={(event) => {
+        if (!canUseHover()) return
         event.currentTarget.style.borderColor = "var(--border)"
         event.currentTarget.style.transform = "translateY(0)"
-        event.currentTarget.style.boxShadow = "none"
+        event.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03)"
       }}
     >
       {item.aiGenerated && (
@@ -247,26 +314,38 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
         }} />
       )}
 
-      <div style={{
+      <a
+        className="news-card-image card-image"
+        href={articleHref}
+        onClick={handleArticleOpen}
+        aria-label={`Open article: ${item.title}`}
+        style={{
         position: "relative",
         height: 180,
         overflow: "hidden",
         background: "var(--surface2)",
+        display: "block",
+        cursor: "pointer",
       }}>
         {item.image ? (
           <img
             src={item.image}
             alt={item.title}
+            loading="lazy"
+            decoding="async"
             style={{
               width: "100%",
               height: "100%",
               objectFit: "cover",
+              objectPosition: "center top",
               transition: "transform 0.4s ease",
             }}
             onMouseEnter={(event) => {
+              if (!canUseHover()) return
               event.currentTarget.style.transform = "scale(1.03)"
             }}
             onMouseLeave={(event) => {
+              if (!canUseHover()) return
               event.currentTarget.style.transform = "scale(1)"
             }}
             onError={(event) => {
@@ -276,7 +355,6 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
                 wrapper.style.display = "flex"
                 wrapper.style.alignItems = "center"
                 wrapper.style.justifyContent = "center"
-                wrapper.style.height = "180px"
                 const existing = wrapper.querySelector("[data-src-label]")
                 if (!existing) {
                   const span = document.createElement("span")
@@ -301,12 +379,21 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: bg,
+            background: `
+              repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(255,255,255,0.01) 10px,
+                rgba(255,255,255,0.01) 20px
+              ),
+              var(--surface2)
+            `,
           }}>
             <span style={{
               fontFamily: "var(--font-mono)",
               fontSize: 10,
-              letterSpacing: "2px",
+              letterSpacing: "3px",
               color: "var(--muted2)",
               textTransform: "uppercase",
             }}>
@@ -329,6 +416,8 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
             fontSize: 9,
             letterSpacing: "1px",
             color: sentimentCfg.color,
+            pointerEvents: "none",
+            userSelect: "none",
           }}>
             {sentimentCfg.label}
           </div>
@@ -348,13 +437,15 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
             fontSize: 9,
             letterSpacing: "1px",
             color: "var(--accent)",
+            pointerEvents: "none",
+            userSelect: "none",
           }}>
             AI
           </div>
         )}
-      </div>
+      </a>
 
-      <div style={{
+      <div className="news-card-body" style={{
         padding: "16px 18px",
         flex: 1,
         display: "flex",
@@ -404,11 +495,14 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
             WebkitBoxOrient: "vertical",
             overflow: "hidden",
             transition: "color 0.15s ease",
+            cursor: "pointer",
           }}
           onMouseEnter={(event) => {
+            if (!canUseHover()) return
             event.currentTarget.style.color = "var(--accent)"
           }}
           onMouseLeave={(event) => {
+            if (!canUseHover()) return
             event.currentTarget.style.color = "var(--text)"
           }}
         >
@@ -449,10 +543,12 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
                   transition: "border-color 0.15s, color 0.15s",
                 }}
                 onMouseEnter={(event) => {
+                  if (!canUseHover()) return
                   event.currentTarget.style.borderColor = "var(--border-accent)"
                   event.currentTarget.style.color = "var(--accent)"
                 }}
                 onMouseLeave={(event) => {
+                  if (!canUseHover()) return
                   event.currentTarget.style.borderColor = "var(--border)"
                   event.currentTarget.style.color = "var(--muted)"
                 }}
@@ -470,8 +566,9 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
             border: "1px solid var(--border)",
             borderLeft: "2px solid var(--accent)",
             borderRadius: 4,
-            fontFamily: "var(--font-mono)",
-            fontSize: 11,
+            fontFamily: "var(--font-ai)",
+            fontSize: 13,
+            fontWeight: 500,
             lineHeight: 1.7,
             color: "var(--text-dim)",
             whiteSpace: "pre-wrap",
@@ -495,14 +592,14 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
         )}
       </div>
 
-      <div style={{
+      <div className="news-card-footer card-footer" style={{
         borderTop: "1px solid var(--border)",
         padding: "10px 18px",
         display: "flex",
         gap: 6,
         alignItems: "center",
       }}>
-        <span style={{
+        <span className="card-date" style={{
           fontFamily: "var(--font-mono)",
           fontSize: 9,
           color: "var(--muted)",
@@ -517,18 +614,29 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
         </span>
 
         <button
+          className="card-action-btn"
           type="button"
           onClick={handleBookmark}
+          onPointerUp={(event) => handleTouchAction(event, handleBookmark)}
+          onTouchEnd={(event) => handleTouchAction(event, handleBookmark)}
           title={bookmarked ? "Remove bookmark" : "Bookmark"}
           style={{
             fontFamily: "var(--font-mono)",
-            fontSize: 12,
+            fontSize: 16,
             lineHeight: 1,
-            padding: "4px 8px",
+            minWidth: 44,
+            minHeight: 44,
+            padding: "6px 10px",
             background: "transparent",
             color: bookmarked ? "var(--accent)" : "var(--muted)",
             border: "1px solid var(--border)",
             borderRadius: 2,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            touchAction: "manipulation",
+            WebkitTapHighlightColor: "transparent",
           }}
         >
           {bookmarked ? "★" : "☆"}
@@ -536,19 +644,30 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
 
         {aiTags.length === 0 && (
           <button
+            className="card-action-btn"
+            type="button"
             onClick={handleGenerateTags}
+            onPointerUp={(event) => handleTouchAction(event, handleGenerateTags)}
+            onTouchEnd={(event) => handleTouchAction(event, handleGenerateTags)}
             disabled={loadingTags}
             title="Generate AI tags"
             style={{
               fontFamily: "var(--font-mono)",
               fontSize: 9,
               letterSpacing: "0.5px",
-              padding: "4px 8px",
+              minWidth: 44,
+              minHeight: 44,
+              padding: "6px 10px",
               background: "transparent",
               color: "var(--muted)",
               border: "1px solid var(--border)",
               borderRadius: 2,
               cursor: loadingTags ? "not-allowed" : "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              touchAction: "manipulation",
+              WebkitTapHighlightColor: "transparent",
             }}
           >
             {loadingTags ? "..." : "tags"}
@@ -556,14 +675,20 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
         )}
 
         <button
+          className="card-action-btn"
+          type="button"
           onClick={handleSentiment}
+          onPointerUp={(event) => handleTouchAction(event, handleSentiment)}
+          onTouchEnd={(event) => handleTouchAction(event, handleSentiment)}
           disabled={loadingSentiment || !!sentiment}
           title="Analyze sentiment"
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: 9,
             letterSpacing: "0.5px",
-            padding: "4px 8px",
+            minWidth: 44,
+            minHeight: 44,
+            padding: "6px 10px",
             background: "transparent",
             color: sentiment
               ? SENTIMENT_CONFIG[sentiment as keyof typeof SENTIMENT_CONFIG]?.color || "var(--muted)"
@@ -571,25 +696,41 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
             border: "1px solid var(--border)",
             borderRadius: 2,
             cursor: sentiment || loadingSentiment ? "default" : "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            touchAction: "manipulation",
+            WebkitTapHighlightColor: "transparent",
           }}
         >
           {loadingSentiment ? "..." : sentiment ? "✓" : "mood"}
         </button>
 
         <button
+          className="card-action-btn"
+          type="button"
           onClick={handleSummarize}
+          onPointerUp={(event) => handleTouchAction(event, handleSummarize)}
+          onTouchEnd={(event) => handleTouchAction(event, handleSummarize)}
           disabled={loadingSummary}
           title="AI summarize"
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: 9,
             letterSpacing: "0.5px",
-            padding: "4px 8px",
+            minWidth: 44,
+            minHeight: 44,
+            padding: "6px 10px",
             background: showSummary ? "var(--accent-dim)" : "transparent",
             color: showSummary ? "var(--accent)" : "var(--muted)",
             border: `1px solid ${showSummary ? "var(--border-accent)" : "var(--border)"}`,
             borderRadius: 2,
             cursor: loadingSummary ? "not-allowed" : "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            touchAction: "manipulation",
+            WebkitTapHighlightColor: "transparent",
           }}
         >
           {loadingSummary ? "..." : summary ? (showSummary ? "hide" : "summary") : "AI"}

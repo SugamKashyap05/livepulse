@@ -38,7 +38,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         : null
 
   return (
-    <main style={authShellStyle}>
+    <main className="auth-shell" style={authShellStyle}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <Link href="/" style={wordmarkStyle}>
           LivePulse
@@ -55,7 +55,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           Intelligence Platform
         </p>
 
-        <form action={signInAction} style={formCardStyle}>
+        <form action={signInAction} className="auth-card" style={formCardStyle}>
           <input name="next" type="hidden" value={params.next || "/"} />
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Email</label>
@@ -102,7 +102,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 }
 
 const authShellStyle = {
-  minHeight: "100vh",
+  minHeight: "100dvh",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

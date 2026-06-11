@@ -2,7 +2,7 @@
 
 Generated: 2026-06-02
 
-Last updated: 2026-06-03 after applying the security remediation plan.
+Last updated: 2026-06-06 after Bluewall v2 remediation.
 
 Scope: current worktree source audit plus targeted local HTTP checks against `http://127.0.0.1:3000`.
 
@@ -11,9 +11,9 @@ Scope: current worktree source audit plus targeted local HTTP checks against `ht
 | Area | Status | Evidence |
 | --- | --- | --- |
 | Admin page/API gate | Verified | `src/proxy.ts`, `src/lib/adminAuth.ts`; local `/admin` returned `307`, `/api/admin/ping` returned `401` without auth |
-| Admin login cookie hardening | Verified | `src/app/api/admin/auth/route.ts` sets `httpOnly`, `sameSite: "strict"`, production-only `secure`, `path: "/"`, `maxAge: 86400` |
+| Admin login cookie hardening | Verified | `src/app/api/admin/auth/route.ts` sets a signed 64-character hex session token, not the raw `ADMIN_SECRET`; cookie is `httpOnly`, `sameSite: "strict"`, production-only `secure`, `path: "/"`, `maxAge: 86400` |
 | User auth | Verified in source | Neon Auth via `src/lib/auth.ts`; protected routes in `src/proxy.ts`; user APIs return `401` without session |
-| Cron sync auth | Verified in source | `src/app/api/sync/route.ts` checks `Authorization: Bearer <CRON_SECRET>` outside development when `CRON_SECRET` exists |
+| Cron sync auth | Verified in source | `src/app/api/sync/route.ts` checks `Authorization: Bearer <CRON_SECRET>` whenever `CRON_SECRET` exists; no development bypass remains |
 | SSRF protection | Verified | `src/app/api/admin/ping/route.ts` requires admin auth and allowlists configured feed hostnames |
 | Destructive delete guard | Verified | `src/app/api/admin/articles/route.ts` requires `confirm=true` for full purge; route is proxy-protected |
 | Batch/newsroom AI admin actions | Verified | `src/app/api/ai/batch/route.ts` and `src/app/api/ai/newsroom/process/route.ts` independently check admin auth |
@@ -106,7 +106,7 @@ Security measure:
 - Requires `ADMIN_SECRET`.
 - Accepts either:
   - `Authorization: Bearer <ADMIN_SECRET>`
-  - `admin_token=<ADMIN_SECRET>` cookie.
+  - `admin_token=<signed 64-character hex session token>` cookie validated by `src/lib/adminSessions.ts`.
 - Fails closed if `ADMIN_SECRET` is missing.
 
 ```ts
@@ -119,9 +119,12 @@ export function isAdminAuthorized(request: NextRequest | Request): boolean {
   const bearerToken = authHeader?.startsWith("Bearer ")
     ? authHeader.slice(7)
     : null
-  const cookieToken = req.cookies?.get?.("admin_token")?.value
+  if (bearerToken === adminSecret) return true
 
-  return bearerToken === adminSecret || cookieToken === adminSecret
+  const cookieToken = req.cookies?.get?.("admin_token")?.value
+  if (cookieToken && validateAdminSession(cookieToken)) return true
+
+  return false
 }
 ```
 
@@ -136,9 +139,11 @@ Security measure:
 - Cookie uses `sameSite: "strict"`.
 - Cookie uses `secure` only in production so localhost HTTP can still set it.
 - Cookie expires after 24 hours.
+- Cookie value is a signed 64-character hex session token, not `ADMIN_SECRET`.
 
 ```ts
-response.cookies.set("admin_token", adminSecret, {
+const sessionToken = createAdminSession()
+response.cookies.set("admin_token", sessionToken, {
   httpOnly: true,
   sameSite: "strict",
   secure: process.env.NODE_ENV === "production",
@@ -293,16 +298,14 @@ File: `src/app/api/sync/route.ts`
 
 Security measure:
 
-- In production, if `CRON_SECRET` exists, sync requires:
+- If `CRON_SECRET` exists, sync always requires:
   - `Authorization: Bearer <CRON_SECRET>`
-- In development, the guard is intentionally bypassed.
+- No `NODE_ENV === "development"` bypass remains.
 
 ```ts
 const authHeader = request.headers.get("authorization")
-const isDev = process.env.NODE_ENV === "development"
 
 if (
-  !isDev &&
   process.env.CRON_SECRET &&
   authHeader !== `Bearer ${process.env.CRON_SECRET}`
 ) {
@@ -310,16 +313,10 @@ if (
 }
 ```
 
-Local check:
-
-```text
-sync dev: 200
-```
-
 Interpretation:
 
-- `200` is expected in local development.
-- Production safety depends on `CRON_SECRET` being present in Vercel env vars.
+- Local and production behavior match when `CRON_SECRET` is set.
+- If `CRON_SECRET` is absent, the route remains intentionally open for bootstrap/manual local use; Vercel must define `CRON_SECRET`.
 
 ## 6. SSRF Protection
 
@@ -470,24 +467,35 @@ File: `src/lib/fetchFeeds.ts`
 Security measures:
 
 - RSS fetches use a 10 second timeout.
-- RSS descriptions strip HTML tags before storage.
+- RSS descriptions decode HTML entities first, then strip HTML tags and leftover angle brackets before storage.
+- Prompt-injection patterns such as "ignore previous instructions" and "system prompt" are redacted.
 - Common tracking query params are removed from links.
 - Duplicate canonical links and repeated normalized titles within a topic are dropped.
 
 ```ts
-function cleanDescription(raw: string | undefined): string {
+export function cleanDescription(raw: string | undefined): string {
   if (!raw) return ""
-  return raw
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .trim()
-    .slice(0, 200)
+  let text = raw
+  text = decodeHtmlEntities(text)
+  text = text.replace(/<[^>]*>/g, "")
+  text = text.replace(/[<>]/g, "")
+  text = stripInjectionPatterns(text)
+  return text.replace(/\s+/g, " ").trim().slice(0, 500)
 }
 ```
+
+## Bluewall v2 Remediation - 2026-06-06
+
+| Finding | Status | Evidence |
+| --- | --- | --- |
+| ANTI-V2-001 raw admin secret cookie | RESOLVED | `src/lib/adminSessions.ts` issues stateless signed 64-char hex tokens; `src/lib/adminAuth.ts` validates session tokens instead of comparing cookie to `ADMIN_SECRET`; logout clears the cookie. |
+| ANTI-V2-002 chat system-role injection | RESOLVED | `src/app/api/ai/chat/route.ts` and `src/app/api/ai/article-chat/route.ts` allow only `user`/`assistant`, strip `< >`, and cap content. |
+| ANTI-V2-003 client text in AI prompts | RESOLVED | Summary, sentiment, and tag routes load `published: true` article content by `id` from Prisma before building prompts. |
+| ANTI-V2-004 entity-order XSS / prompt injection sanitizer bug | RESOLVED | `cleanDescription()` decodes entities before stripping tags and redacts injection phrases. |
+| ANTI-V2-005 purge `days=0` | RESOLVED | `days` is clamped to `1..365`; no delete occurs without `confirm=true`. |
+| ANTI-V2-006 batch limit exhaustion | RESOLVED | Batch `limit` is clamped to `1..50` and invalid values default to 20. |
+| ANTI-V2-007 sync dev bypass | RESOLVED | `isDev` bypass removed; `CRON_SECRET` check is environment-independent. |
+| ANTI-V2-008 verbose `String(error)` API leaks | RESOLVED | Source scan returns zero `String(error)` / `String(e)` API responses. |
 
 ## 11. XSS And Link Handling
 
@@ -778,7 +786,7 @@ Expected current behavior: requests return `200`, `500`, or `503`, but not `429`
 
 ### Gap 3 - No Brute Force Protection On Admin Login
 
-Status: partially resolved.
+Status: resolved for current launch hardening.
 
 Route: `POST /api/admin/auth`
 
@@ -789,20 +797,21 @@ Severity: MEDIUM.
 Finding:
 
 - The admin login uses one shared `ADMIN_SECRET`.
-- The cookie still stores the raw `ADMIN_SECRET` as the session credential.
+- The cookie no longer stores the raw `ADMIN_SECRET`; it stores a signed 64-character hex session token validated by `src/lib/adminSessions.ts`.
 - A fixed 100ms delay has now been added before all configured success/failure responses to slow brute-force attempts.
-- Medium-term hardening remains open: replace the raw secret cookie with a signed random session token or admin role-based auth.
+- Additional medium-term hardening remains useful: persistent/shared session storage or role-based admin auth for multi-instance production.
 
 Current code evidence:
 
 ```ts
-const AUTH_RESPONSE_DELAY_MS = 100
-
-function delayAuthResponse() {
-  return new Promise((resolve) => {
-    setTimeout(resolve, AUTH_RESPONSE_DELAY_MS)
-  })
-}
+const sessionToken = createAdminSession()
+response.cookies.set("admin_token", sessionToken, {
+  httpOnly: true,
+  sameSite: "strict",
+  secure: process.env.NODE_ENV === "production",
+  path: "/",
+  maxAge: 86400,
+})
 ```
 
 Verification:
@@ -855,24 +864,21 @@ Severity: LOW-MEDIUM.
 Finding:
 
 - RSS content is used as AI context in Scout, chat, and digest prompts.
-- Current `cleanDescription()` strips HTML and caps stored descriptions at 200 chars, which is stricter than the requested 500 char short-term cap.
+- Current `cleanDescription()` decodes entities first, strips tags and leftover angle brackets, redacts injection patterns, and caps stored descriptions at 500 chars.
 - Scout prompt descriptions are capped to 150 chars.
-- There is still no instruction-pattern detector for prompt injection text such as "ignore previous instructions".
+- Instruction-pattern detection is present for text such as "ignore previous instructions", "system prompt", and "new instructions:".
 
 Current code evidence:
 
 ```ts
-function cleanDescription(raw: string | undefined): string {
+export function cleanDescription(raw: string | undefined): string {
   if (!raw) return ""
-  return raw
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .trim()
-    .slice(0, 200)
+  let text = raw
+  text = decodeHtmlEntities(text)
+  text = text.replace(/<[^>]*>/g, "")
+  text = text.replace(/[<>]/g, "")
+  text = stripInjectionPatterns(text)
+  return text.replace(/\s+/g, " ").trim().slice(0, 500)
 }
 ```
 

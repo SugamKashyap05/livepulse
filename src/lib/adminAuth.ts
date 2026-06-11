@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server"
-import { validateAdminSession } from "@/app/api/admin/auth/route"
+import { validateAdminSession } from "@/lib/adminSessions"
 
 export function isAdminAuthorized(request: NextRequest | Request): boolean {
   const adminSecret = process.env.ADMIN_SECRET

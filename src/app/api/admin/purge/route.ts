@@ -27,7 +27,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({
         preview: true,
         wouldDelete: count,
-        message: `Add ?confirm=true to delete ${count} articles`,
+        message: `Add ?confirm=true to delete ${count} articles older than ${days} days`,
       })
     }
 

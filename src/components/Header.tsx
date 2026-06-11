@@ -1,5 +1,6 @@
 import Link from "next/link"
 import AuthNav from "@/components/AuthNav"
+import MobileHeaderMenu from "@/components/MobileHeaderMenu"
 
 const navLinkStyle = {
   fontFamily: "var(--font-mono)",
@@ -23,14 +24,18 @@ export default function Header() {
       WebkitBackdropFilter: "blur(12px) saturate(180%)",
       backgroundColor: "rgba(9, 9, 12, 0.92)",
     }}>
-      <div style={{
+      <div
+        className="public-header-top"
+        style={{
         borderBottom: "1px solid var(--border)",
         padding: "6px 32px",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
       }}>
-        <span style={{
+        <span
+          className="public-header-date"
+          style={{
           fontFamily: "var(--font-mono)",
           fontSize: 10,
           color: "var(--muted)",
@@ -67,7 +72,48 @@ export default function Header() {
         </div>
       </div>
 
-      <div style={{
+      <div
+        className="public-header-mobile mobile-only"
+        style={{ display: "none" }}
+      >
+        <Link href="/" style={{
+          fontFamily: "var(--font-display)",
+          fontSize: 21,
+          fontWeight: 900,
+          fontStyle: "italic",
+          color: "var(--text)",
+          letterSpacing: "-0.5px",
+          whiteSpace: "nowrap",
+        }}>
+          LivePulse
+        </Link>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <span style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            fontFamily: "var(--font-mono)",
+            fontSize: 9,
+            letterSpacing: "1px",
+            color: "var(--positive)",
+          }}>
+            <span style={{
+              width: 5,
+              height: 5,
+              borderRadius: "50%",
+              background: "var(--positive)",
+              animation: "pulse-live 2s ease-in-out infinite",
+              display: "inline-block",
+            }} />
+            LIVE
+          </span>
+          <MobileHeaderMenu authSlot={<AuthNav />} />
+        </div>
+      </div>
+
+      <div
+        className="public-header-main"
+        style={{
         padding: "0 32px",
         display: "grid",
         gridTemplateColumns: "1fr auto 1fr",

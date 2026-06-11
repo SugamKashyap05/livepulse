@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       message: "Agentic cycle and generation completed."
     })
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    console.error("[api/ai/newsroom/process] error:", e)
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }
 }

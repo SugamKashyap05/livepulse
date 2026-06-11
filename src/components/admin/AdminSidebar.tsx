@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { AdminNotificationBell } from "@/components/admin/AdminNotificationProvider"
 
 const NAV = [
   { label: "Dashboard", href: "/admin", icon: "D" },
@@ -15,11 +16,12 @@ const NAV = [
 ]
 
 export default function AdminSidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    if (typeof window === "undefined") return false
-    return localStorage.getItem("admin-sidebar-collapsed") === "true"
-  })
+  const [isCollapsed, setIsCollapsed] = useState(false)
   const pathname = usePathname()
+
+  useEffect(() => {
+    setIsCollapsed(localStorage.getItem("admin-sidebar-collapsed") === "true")
+  }, [])
 
   const toggleCollapse = () => {
     const next = !isCollapsed
@@ -143,6 +145,7 @@ export default function AdminSidebar() {
         display: "grid",
         gap: 10,
       }}>
+        <AdminNotificationBell collapsed={isCollapsed} />
         <Link
           href="/"
           style={{

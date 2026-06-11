@@ -1,5 +1,6 @@
 import ArticleFeed from "@/components/ArticleFeed"
 import Header from "@/components/Header"
+import SearchBar from "@/components/SearchBar"
 import { getCurrentUserId, isNeonAuthConfigured } from "@/lib/auth"
 import { getPaginatedFeed } from "@/lib/paginatedFeed"
 
@@ -23,7 +24,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   return (
     <>
       <Header />
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 24px" }}>
+      <main className="public-page-shell" style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 24px" }}>
+        <div className="search-page-form" style={{ maxWidth: 480, marginBottom: 20 }}>
+          <SearchBar />
+        </div>
         <div style={{
           marginBottom: 24,
           fontFamily: "'IBM Plex Mono', monospace",

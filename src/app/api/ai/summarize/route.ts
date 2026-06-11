@@ -6,15 +6,23 @@ export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
-    const { id, force = false } = await request.json()
+    const body = await request.json()
+    const id = body?.id
+    const force = body?.force === true
 
-    if (!id) {
-      return NextResponse.json({ error: "Missing id" }, { status: 400 })
+    if (!id || typeof id !== "string") {
+      return NextResponse.json({ error: "id required" }, { status: 400 })
     }
 
     const article = await prisma.newsArticle.findFirst({
       where: { id, published: true },
-      select: { id: true, title: true, description: true, summary: true },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        topic: true,
+        summary: true,
+      },
     })
 
     if (!article) {

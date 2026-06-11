@@ -21,6 +21,7 @@ export async function GET(request: Request) {
     })
     return NextResponse.json(drafts)
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    console.error("[api/admin/ai/drafts] error:", e)
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }
 }

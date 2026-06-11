@@ -1,11 +1,16 @@
 "use client"
 
-import type { CSSProperties, FormEvent } from "react"
-import { useState } from "react"
+import type { CSSProperties, FormEvent, ReactNode } from "react"
+import { useEffect, useRef, useState } from "react"
 
 type ChatMessage = {
   role: "user" | "assistant"
   content: string
+}
+
+type StreamEvent = {
+  type?: string
+  content?: string
 }
 
 type ArticleAiPanelProps = {
@@ -48,6 +53,61 @@ function splitSummary(summary: string) {
     .filter(Boolean)
 }
 
+function formatAIResponse(content: string): ReactNode {
+  const lines = content.split("\n")
+  const elements: ReactNode[] = []
+  let bulletBuffer: string[] = []
+
+  const flushBullets = () => {
+    if (bulletBuffer.length === 0) return
+    elements.push(
+      <ul key={`ul-${elements.length}`} style={formattedListStyle}>
+        {bulletBuffer.map((item, index) => (
+          <li key={index} style={formattedListItemStyle}>
+            <span style={formattedBulletStyle}>◆</span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    )
+    bulletBuffer = []
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    const bulletMatch =
+      trimmed.match(/^[*\-•]\s+(.+)/) ||
+      trimmed.match(/^\d+\.\s+(.+)/)
+
+    if (bulletMatch) {
+      bulletBuffer.push(bulletMatch[1])
+      continue
+    }
+
+    flushBullets()
+
+    if (trimmed.length > 0) {
+      const isLabel = trimmed.endsWith(":")
+      elements.push(
+        <p
+          key={`p-${elements.length}`}
+          style={{
+            ...formattedParagraphStyle,
+            color: isLabel ? "var(--text-dim)" : "var(--text)",
+            fontWeight: isLabel ? 500 : 400,
+            letterSpacing: isLabel ? "0.3px" : 0,
+          }}
+        >
+          {trimmed}
+        </p>
+      )
+    }
+  }
+
+  flushBullets()
+  return <>{elements}</>
+}
+
 export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
   const [summary, setSummary] = useState<string | null>(article.summary)
   const [sentiment, setSentiment] = useState<string | null>(article.sentiment)
@@ -58,11 +118,22 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
   const [loadingSentiment, setLoadingSentiment] = useState(false)
   const [loadingTags, setLoadingTags] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
+  const [isThinking, setIsThinking] = useState(false)
+  const [streamingContent, setStreamingContent] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const lastTouchActivationAt = useRef(0)
 
   const sentimentConfig =
     SENTIMENT_CONFIG[sentiment as keyof typeof SENTIMENT_CONFIG]
   const summaryLines = summary ? splitSummary(summary) : []
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    })
+  }, [messages, streamingContent])
 
   async function handleSummarize(force = false) {
     if ((summary && !force) || loadingSummary) return
@@ -162,6 +233,8 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
     setMessages(nextMessages)
     setChatInput("")
     setIsTyping(true)
+    setIsThinking(true)
+    setStreamingContent("")
     setError(null)
 
     try {
@@ -170,24 +243,80 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           articleId: article.id,
+          topic: article.topic,
           messages: nextMessages.slice(-12),
         }),
       })
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        setError("AI service is unavailable right now.")
-        return
+
+      if (!res.ok || !res.body) {
+        throw new Error("Article chat failed")
       }
-      if (data.reply) {
-        setMessages((prev) => [
-          ...prev.slice(-11),
-          { role: "assistant", content: data.reply },
-        ])
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let accumulated = ""
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const events = buffer.split("\n\n")
+        buffer = events.pop() ?? ""
+
+        for (const rawEvent of events) {
+          const line = rawEvent
+            .split("\n")
+            .find((eventLine) => eventLine.startsWith("data: "))
+          if (!line) continue
+
+          try {
+            const event = JSON.parse(line.slice(6)) as StreamEvent
+
+            if (event.type === "start") {
+              setIsThinking(false)
+            }
+
+            if (event.type === "token" && typeof event.content === "string") {
+              accumulated += event.content
+              setStreamingContent(accumulated)
+            }
+
+            if (event.type === "done") {
+              const finalContent =
+                typeof event.content === "string" ? event.content : accumulated
+              setStreamingContent("")
+              setMessages((prev) => [
+                ...prev.slice(-11),
+                { role: "assistant", content: finalContent },
+              ])
+            }
+
+            if (event.type === "error") {
+              setStreamingContent("")
+              setMessages((prev) => [
+                ...prev.slice(-11),
+                {
+                  role: "assistant",
+                  content:
+                    event.content ||
+                    "AI service unavailable. Check that Ollama is running.",
+                },
+              ])
+            }
+          } catch {
+            // Ignore malformed SSE frames.
+          }
+        }
       }
     } catch {
+      setStreamingContent("")
       setError("AI service is unavailable right now.")
     } finally {
       setIsTyping(false)
+      setIsThinking(false)
+      setStreamingContent("")
     }
   }
 
@@ -196,15 +325,35 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
     askArticle(chatInput)
   }
 
+  function shouldIgnoreFollowUpClick() {
+    return Date.now() - lastTouchActivationAt.current < 700
+  }
+
+  function runFromTouch(
+    event: React.TouchEvent<HTMLButtonElement> | React.PointerEvent<HTMLButtonElement>,
+    action: () => void | Promise<void>
+  ) {
+    if ("pointerType" in event && event.pointerType === "mouse") return
+    event.preventDefault()
+    event.stopPropagation()
+    lastTouchActivationAt.current = Date.now()
+    void action()
+  }
+
+  function runFromClick(action: () => void | Promise<void>) {
+    if (shouldIgnoreFollowUpClick()) return
+    void action()
+  }
+
   return (
-    <section style={panelStyle}>
-      <div style={headerStyle}>
+    <section className="article-ai-panel" style={panelStyle}>
+      <div className="article-ai-header" style={headerStyle}>
         <div>
           <div style={eyebrowStyle}>ARTICLE AI</div>
           <h2 style={headingStyle}>Reader briefing</h2>
           <p style={subheadStyle}>
             Get the useful version: key facts, mood, tags, and a focused chat
-            that only uses this article excerpt.
+            with related coverage and today&apos;s broader headlines.
           </p>
         </div>
         <div style={statusGridStyle}>
@@ -215,14 +364,16 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
       </div>
 
       <div style={summaryCardStyle}>
-        <div style={sectionHeaderStyle}>
+        <div className="article-ai-section-header" style={sectionHeaderStyle}>
           <div>
             <div style={labelStyle}>AI SUMMARY</div>
             <div style={sectionTitleStyle}>What this story says</div>
           </div>
           <button
             type="button"
-            onClick={() => handleSummarize(Boolean(summary))}
+            onClick={() => runFromClick(() => handleSummarize(Boolean(summary)))}
+            onPointerUp={(event) => runFromTouch(event, () => handleSummarize(Boolean(summary)))}
+            onTouchEnd={(event) => runFromTouch(event, () => handleSummarize(Boolean(summary)))}
             disabled={loadingSummary}
             style={primaryButtonStyle}
           >
@@ -268,7 +419,9 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
               </div>
               <button
                 type="button"
-                onClick={handleSentiment}
+                onClick={() => runFromClick(handleSentiment)}
+                onPointerUp={(event) => runFromTouch(event, handleSentiment)}
+                onTouchEnd={(event) => runFromTouch(event, handleSentiment)}
                 disabled={loadingSentiment}
                 style={secondaryButtonStyle}
               >
@@ -299,7 +452,9 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
               </div>
               <button
                 type="button"
-                onClick={handleTags}
+                onClick={() => runFromClick(handleTags)}
+                onPointerUp={(event) => runFromTouch(event, handleTags)}
+                onTouchEnd={(event) => runFromTouch(event, handleTags)}
                 disabled={loadingTags}
                 style={secondaryButtonStyle}
               >
@@ -311,7 +466,7 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
       </div>
 
       <div style={chatCardStyle}>
-        <div style={sectionHeaderStyle}>
+        <div className="article-ai-section-header" style={sectionHeaderStyle}>
           <div>
             <div style={labelStyle}>ASK ABOUT THIS ARTICLE</div>
             <div style={sectionTitleStyle}>Article-aware chat</div>
@@ -325,7 +480,9 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
               <button
                 key={question}
                 type="button"
-                onClick={() => askArticle(question)}
+                onClick={() => runFromClick(() => askArticle(question))}
+                onPointerUp={(event) => runFromTouch(event, () => askArticle(question))}
+                onTouchEnd={(event) => runFromTouch(event, () => askArticle(question))}
                 disabled={isTyping}
                 style={suggestionStyle}
               >
@@ -335,7 +492,7 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
           </div>
         )}
 
-        {messages.length > 0 && (
+        {(messages.length > 0 || isThinking || streamingContent) && (
           <div style={messageListStyle}>
             {messages.map((message, index) => (
               <div
@@ -343,32 +500,99 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
                 style={{
                   ...messageStyle,
                   alignSelf: message.role === "user" ? "flex-end" : "flex-start",
+                  maxWidth: message.role === "user" ? "80%" : "86%",
+                  padding: message.role === "user" ? "12px 16px" : "14px 18px",
                   background: message.role === "user"
-                    ? "rgba(74,240,196,0.1)"
-                    : "var(--surface)",
-                  borderColor: message.role === "user"
-                    ? "rgba(74,240,196,0.25)"
-                    : "var(--border)",
-                  color: message.role === "user" ? "var(--text)" : "var(--muted)",
+                    ? "rgba(108, 143, 255, 0.1)"
+                    : "var(--surface2)",
+                  border: message.role === "user"
+                    ? "1px solid rgba(108, 143, 255, 0.2)"
+                    : "1px solid var(--border2)",
+                  borderLeft: message.role === "user"
+                    ? "1px solid rgba(108, 143, 255, 0.2)"
+                    : "3px solid var(--accent)",
+                  borderRadius: message.role === "user"
+                    ? "8px 0 8px 8px"
+                    : "0 8px 8px 8px",
+                  color: "var(--text)",
                 }}
               >
-                {message.content}
+                {message.role === "assistant"
+                  ? formatAIResponse(message.content)
+                  : message.content}
               </div>
             ))}
+
+            {isThinking && (
+              <div style={thinkingRowStyle}>
+                <div style={thinkingBubbleStyle}>
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      style={{
+                        ...thinkingDotStyle,
+                        animationDelay: `${i * 0.2}s`,
+                      }}
+                    />
+                  ))}
+                  <span style={thinkingTextStyle}>processing query...</span>
+                </div>
+              </div>
+            )}
+
+            {streamingContent && (
+              <div style={streamingBubbleStyle}>
+                {formatAIResponse(streamingContent)}
+                <span style={streamingCursorStyle} />
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
           </div>
         )}
 
-        <form onSubmit={handleAsk} style={chatFormStyle}>
+        <form
+          className="article-ai-chat-form"
+          onSubmit={handleAsk}
+          style={chatFormStyle}
+          onFocus={(event) => {
+            event.currentTarget.style.border = "1px solid rgba(108,143,255,0.4)"
+            event.currentTarget.style.background = "var(--surface)"
+          }}
+          onBlur={(event) => {
+            event.currentTarget.style.border = "1px solid var(--border2)"
+            event.currentTarget.style.background = "var(--surface2)"
+          }}
+        >
           <input
             value={chatInput}
             onChange={(event) => setChatInput(event.target.value)}
+            onFocus={(event) => {
+              event.currentTarget.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest",
+              })
+            }}
             placeholder="Ask what changed, why it matters, or what to watch next..."
             style={chatInputStyle}
           />
           <button
             type="submit"
             disabled={isTyping || !chatInput.trim()}
-            style={primaryButtonStyle}
+            onPointerUp={(event) => runFromTouch(event, () => askArticle(chatInput))}
+            onTouchEnd={(event) => runFromTouch(event, () => askArticle(chatInput))}
+            style={{
+              ...askButtonStyle,
+              opacity: isTyping || !chatInput.trim() ? 0.4 : 1,
+              cursor: isTyping || !chatInput.trim() ? "not-allowed" : "pointer",
+            }}
+            onMouseEnter={(event) => {
+              if (!event.currentTarget.disabled) event.currentTarget.style.opacity = "0.85"
+            }}
+            onMouseLeave={(event) => {
+              event.currentTarget.style.opacity =
+                isTyping || !chatInput.trim() ? "0.4" : "1"
+            }}
           >
             ASK
           </button>
@@ -425,7 +649,7 @@ const headingStyle: CSSProperties = {
 const subheadStyle: CSSProperties = {
   maxWidth: 620,
   margin: "8px 0 0",
-  color: "var(--muted)",
+  color: "var(--text-dim)",
   fontSize: 13,
   lineHeight: 1.6,
 }
@@ -486,24 +710,29 @@ const labelStyle: CSSProperties = {
 }
 
 const sectionTitleStyle: CSSProperties = {
-  color: "var(--text)",
-  fontSize: 15,
-  fontWeight: 700,
+  color: "var(--text-dim)",
+  fontFamily: "var(--font-mono)",
+  fontSize: 12,
+  fontWeight: 400,
+  letterSpacing: "0.3px",
   marginTop: 3,
 }
 
 const summaryListStyle: CSSProperties = {
   display: "grid",
-  gap: 10,
+  gap: 12,
 }
 
 const summaryItemStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "34px minmax(0, 1fr)",
   gap: 12,
-  color: "var(--text)",
-  fontSize: 14,
-  lineHeight: 1.7,
+  color: "rgba(232,232,240,0.92)",
+  fontFamily: "var(--font-ai)",
+  fontSize: 15,
+  fontWeight: 500,
+  lineHeight: 1.75,
+  letterSpacing: "0.01em",
 }
 
 const summaryNumberStyle: CSSProperties = {
@@ -514,8 +743,9 @@ const summaryNumberStyle: CSSProperties = {
 }
 
 const emptySummaryStyle: CSSProperties = {
-  color: "var(--muted)",
-  fontSize: 13,
+  color: "var(--text-dim)",
+  fontFamily: "var(--font-ai)",
+  fontSize: 14,
   lineHeight: 1.7,
   borderLeft: "2px solid var(--accent)",
   paddingLeft: 12,
@@ -544,8 +774,9 @@ const metricStyle: CSSProperties = {
 }
 
 const helperTextStyle: CSSProperties = {
-  color: "var(--muted)",
-  fontSize: 12,
+  color: "var(--text-dim)",
+  fontFamily: "var(--font-ai)",
+  fontSize: 13,
   lineHeight: 1.6,
   margin: "8px 0 12px",
 }
@@ -603,12 +834,11 @@ const messageListStyle: CSSProperties = {
 }
 
 const messageStyle: CSSProperties = {
-  maxWidth: "86%",
-  border: "1px solid var(--border)",
-  borderRadius: 7,
-  padding: "10px 12px",
-  fontSize: 12,
+  fontFamily: "var(--font-ai)",
+  fontSize: 14,
+  fontWeight: 500,
   lineHeight: 1.65,
+  letterSpacing: "0.005em",
   whiteSpace: "pre-wrap",
 }
 
@@ -618,21 +848,96 @@ const typingStyle: CSSProperties = {
   fontSize: 10,
 }
 
+const thinkingRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "flex-start",
+}
+
+const thinkingBubbleStyle: CSSProperties = {
+  display: "flex",
+  gap: 4,
+  alignItems: "center",
+  padding: "10px 14px",
+  background: "var(--surface2)",
+  border: "1px solid var(--border2)",
+  borderLeft: "3px solid var(--accent)",
+  borderRadius: "0 8px 8px 8px",
+}
+
+const thinkingDotStyle: CSSProperties = {
+  width: 5,
+  height: 5,
+  borderRadius: "50%",
+  background: "var(--accent)",
+  display: "inline-block",
+  animation: "thinking-dot 1.2s ease-in-out infinite",
+}
+
+const thinkingTextStyle: CSSProperties = {
+  fontFamily: "var(--font-mono)",
+  fontSize: 10,
+  color: "var(--muted)",
+  marginLeft: 6,
+  letterSpacing: "0.5px",
+}
+
+const streamingBubbleStyle: CSSProperties = {
+  ...messageStyle,
+  alignSelf: "flex-start",
+  maxWidth: "86%",
+  padding: "14px 18px",
+  background: "var(--surface2)",
+  border: "1px solid var(--border2)",
+  borderLeft: "3px solid var(--accent)",
+  borderRadius: "0 8px 8px 8px",
+  color: "var(--text)",
+}
+
+const streamingCursorStyle: CSSProperties = {
+  display: "inline-block",
+  width: 8,
+  height: 14,
+  background: "var(--accent)",
+  marginLeft: 2,
+  verticalAlign: "text-bottom",
+  animation: "cursor-blink 0.8s step-end infinite",
+}
+
 const chatFormStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) auto",
-  gap: 8,
+  display: "flex",
+  border: "1px solid var(--border2)",
+  borderRadius: 6,
+  overflow: "hidden",
+  background: "var(--surface2)",
+  transition: "border-color 0.15s, background 0.15s",
 }
 
 const chatInputStyle: CSSProperties = {
+  flex: 1,
   minWidth: 0,
-  border: "1px solid var(--border)",
-  background: "var(--surface2)",
+  border: "none",
+  background: "transparent",
   color: "var(--text)",
-  padding: "11px 12px",
-  borderRadius: 5,
-  fontFamily: "'IBM Plex Mono', monospace",
+  padding: "12px 16px",
+  borderRadius: "6px 0 0 6px",
+  fontFamily: "var(--font-mono)",
   fontSize: 12,
+  outline: "none",
+}
+
+const askButtonStyle: CSSProperties = {
+  background: "var(--accent)",
+  color: "#000",
+  fontFamily: "var(--font-mono)",
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: "1.5px",
+  padding: "12px 18px",
+  border: "none",
+  borderRadius: "0 6px 6px 0",
+  transition: "opacity 0.15s",
+  whiteSpace: "nowrap",
 }
 
 const primaryButtonStyle: CSSProperties = {
@@ -666,4 +971,37 @@ const errorStyle: CSSProperties = {
   fontFamily: "'IBM Plex Mono', monospace",
   fontSize: 10,
   color: "var(--red)",
+}
+
+const formattedListStyle: CSSProperties = {
+  margin: "8px 0",
+  paddingLeft: 0,
+  listStyle: "none",
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+}
+
+const formattedListItemStyle: CSSProperties = {
+  display: "flex",
+  gap: 8,
+  alignItems: "flex-start",
+  fontFamily: "var(--font-ai)",
+  fontSize: 14,
+  lineHeight: 1.6,
+  color: "var(--text)",
+}
+
+const formattedBulletStyle: CSSProperties = {
+  color: "var(--accent)",
+  flexShrink: 0,
+  marginTop: 3,
+  fontSize: 8,
+}
+
+const formattedParagraphStyle: CSSProperties = {
+  fontFamily: "var(--font-ai)",
+  fontSize: 14,
+  lineHeight: 1.7,
+  margin: "4px 0",
 }

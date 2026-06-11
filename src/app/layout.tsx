@@ -1,10 +1,15 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import "./globals.css"
 import ChatAssistant from "@/components/ChatAssistant"
 
 export const metadata: Metadata = {
   title: "LivePulse - World News",
   description: "Live news aggregator with local Ollama AI",
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 }
 
 export default function RootLayout({
@@ -15,13 +20,19 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
-          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Serif:ital,wght@0,300;0,400;1,300;1,400&family=Playfair+Display:ital,wght@0,700;0,900;1,700&display=swap"
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Serif:ital,wght@0,300;0,400;1,300;1,400&family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,700;0,900;1,700&display=swap"
           rel="stylesheet"
         />
       </head>
       <body style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         display: "flex",
         flexDirection: "column",
       }}>
@@ -68,7 +79,7 @@ export default function RootLayout({
             color: "var(--muted2)",
             letterSpacing: "0.5px",
           }}>
-            © {new Date().getFullYear()} LivePulse
+            &copy; {new Date().getFullYear()} LivePulse
           </span>
         </footer>
         <ChatAssistant />

@@ -20,6 +20,7 @@ export default function TopicTabs({ activeSlug }: TopicTabsProps) {
 
   return (
     <nav
+      className="scroll-row topic-tabs"
       aria-label="Topics"
       style={{
         display: "flex",
@@ -43,11 +44,18 @@ export default function TopicTabs({ activeSlug }: TopicTabsProps) {
               fontSize: 11,
               letterSpacing: "1px",
               textTransform: "uppercase",
-              padding: "8px 2px 7px",
-              borderBottom: `1px solid ${active ? "var(--accent)" : "transparent"}`,
+              padding: "7px 12px",
+              background: active
+                ? "rgba(108,143,255,0.1)"
+                : "transparent",
+              border: `1px solid ${active
+                ? "rgba(108,143,255,0.3)"
+                : "var(--border)"}`,
+              borderRadius: 20,
               color: active ? "var(--accent)" : "var(--muted)",
               textDecoration: "none",
               whiteSpace: "nowrap",
+              transition: "all 0.15s ease",
             }}
           >
             {topic.label}

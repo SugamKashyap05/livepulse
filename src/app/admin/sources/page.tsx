@@ -28,9 +28,12 @@ export default async function SourcesPage() {
       region: source.region || "global",
       enabled: true,
       priority: source.priority || 5,
+      fetchIntervalMinutes: 30,
       lastFetched: null,
       lastStatus: null,
       failCount: 0,
+      lastErrorAt: null,
+      lastErrorMessage: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     }))

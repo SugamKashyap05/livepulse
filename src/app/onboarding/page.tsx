@@ -70,7 +70,7 @@ export default function OnboardingPage() {
           <div style={{ ...labelStyle, marginBottom: 12 }}>
             YOUR REGION
           </div>
-          <div style={choiceGridStyle}>
+          <div className="onboarding-choice-grid" style={choiceGridStyle}>
             {REGION_OPTIONS.map((option) => {
               const selected = region === option.value
               return (
@@ -94,7 +94,7 @@ export default function OnboardingPage() {
 
         <div style={{ marginTop: 18 }}>
           <div style={{ ...labelStyle, marginBottom: 12 }}>TOPICS</div>
-          <div style={topicGridStyle}>
+          <div className="onboarding-choice-grid" style={topicGridStyle}>
             {TOPICS.map((topic) => {
               const selected = topics.includes(topic.slug)
               return (
@@ -139,7 +139,7 @@ export default function OnboardingPage() {
 }
 
 const pageStyle = {
-  minHeight: "100vh",
+  minHeight: "100dvh",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -149,7 +149,7 @@ const pageStyle = {
       rgba(108,143,255,0.05) 0%,
       transparent 60%)
   `,
-  padding: "32px 16px",
+  padding: "clamp(16px, 3vw, 32px) 16px",
 } as const
 
 const panelStyle = {
@@ -158,7 +158,7 @@ const panelStyle = {
   background: "var(--surface)",
   border: "1px solid var(--border)",
   borderRadius: 10,
-  padding: 32,
+  padding: "clamp(16px, 4vw, 32px)",
   boxShadow: "var(--shadow-lg)",
 } as const
 
@@ -188,13 +188,13 @@ const labelStyle = {
 
 const choiceGridStyle = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr",
+  gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
   gap: 8,
 } as const
 
 const topicGridStyle = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr",
+  gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
   gap: 8,
 } as const
 

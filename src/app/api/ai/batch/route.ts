@@ -13,9 +13,11 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { task } = body
+    const task = body.task
     const rawLimit = parseInt(body.limit ?? "20")
-    const limit = Math.min(Math.max(1, rawLimit), 50)
+    const limit = Number.isNaN(rawLimit)
+      ? 20
+      : Math.min(Math.max(1, rawLimit), 50)
 
     const articles = await prisma.newsArticle.findMany({
       where:

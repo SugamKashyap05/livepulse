@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/db"
+import crypto from "crypto"
+import { sanitizeAiText } from "@/lib/textSafety"
 
 /**
  * Ollama AI Client Utility
@@ -21,8 +23,34 @@ export interface OllamaMessage {
   content: string
 }
 
+export type OllamaChatOptions = {
+  temperature?: number
+  maxTokens?: number
+  timeoutMs?: number
+  [key: string]: unknown
+}
+
+type ManagerContext = {
+  totalArticles: number
+  topics: string[]
+  lastSync: string
+  recentAiActions: string[]
+}
+
 const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434"
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "llama3"
+export const EMBEDDING_MODEL =
+  process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text:latest"
+export const EMBEDDING_DIM = 768
+const EMBEDDING_CACHE_TTL_MS = 5 * 60 * 1000
+const EMBEDDING_CACHE_MAX = 100
+
+type EmbeddingCacheEntry = {
+  vector: number[]
+  expiresAt: number
+}
+
+const embeddingCache = new Map<string, EmbeddingCacheEntry>()
 
 // Specialized Models
 export const MODELS = {
@@ -31,6 +59,41 @@ export const MODELS = {
   CHAT: process.env.OLLAMA_CHAT_MODEL || "llama3",
   MANAGER: process.env.OLLAMA_MANAGER_MODEL || "llama3",
   FAST: process.env.OLLAMA_FAST_MODEL || "phi3:3.8b",
+}
+
+function getEmbeddingCacheKey(text: string) {
+  return crypto
+    .createHash("sha256")
+    .update(text.toLowerCase().trim())
+    .digest("hex")
+}
+
+function setEmbeddingCache(key: string, vector: number[]) {
+  if (embeddingCache.has(key)) embeddingCache.delete(key)
+  embeddingCache.set(key, {
+    vector,
+    expiresAt: Date.now() + EMBEDDING_CACHE_TTL_MS,
+  })
+
+  while (embeddingCache.size > EMBEDDING_CACHE_MAX) {
+    const oldestKey = embeddingCache.keys().next().value
+    if (!oldestKey) break
+    embeddingCache.delete(oldestKey)
+  }
+}
+
+function getEmbeddingCache(key: string) {
+  const cached = embeddingCache.get(key)
+  if (!cached) return null
+
+  if (cached.expiresAt <= Date.now()) {
+    embeddingCache.delete(key)
+    return null
+  }
+
+  embeddingCache.delete(key)
+  embeddingCache.set(key, cached)
+  return cached.vector
 }
 
 type AiLogInput = {
@@ -102,17 +165,27 @@ async function getOllamaErrorMessage(response: Response) {
   }
 }
 
-export async function ollamaChat(model: string, messages: OllamaMessage[], options: any = {}) {
+export async function ollamaChat(
+  model: string,
+  messages: OllamaMessage[],
+  options: OllamaChatOptions = {}
+) {
   const start = Date.now()
+  const timeoutMs =
+    typeof options.timeoutMs === "number" ? options.timeoutMs : 120000
+  const { timeoutMs: _timeoutMs, ...ollamaOptions } = options
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         model,
         messages,
         stream: false,
-        options,
+        options: ollamaOptions,
       }),
     })
 
@@ -132,6 +205,89 @@ export async function ollamaChat(model: string, messages: OllamaMessage[], optio
   } catch (error) {
     console.error("[Ollama Chat Error]:", error)
     throw error
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+export async function ollamaChatStream(
+  model: string,
+  messages: OllamaMessage[],
+  onChunk: (token: string) => void,
+  options: Record<string, unknown> = {}
+): Promise<{ content: string; tokens: number; ms: number }> {
+  const start = Date.now()
+  const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages,
+      stream: true,
+      options,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await getOllamaErrorMessage(response))
+  }
+
+  if (!response.body) {
+    throw new Error("No response body from Ollama")
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let fullContent = ""
+  let totalTokens = 0
+  let buffer = ""
+
+  const readLine = (line: string) => {
+    if (!line.trim()) return false
+
+    const parsed = JSON.parse(line)
+    if (parsed.message?.content) {
+      fullContent += parsed.message.content
+      onChunk(parsed.message.content)
+    }
+    if (typeof parsed.eval_count === "number") {
+      totalTokens = parsed.eval_count
+    }
+    if (typeof parsed.prompt_eval_count === "number") {
+      totalTokens += parsed.prompt_eval_count
+    }
+
+    return Boolean(parsed.done)
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split("\n")
+    buffer = lines.pop() ?? ""
+
+    for (const line of lines) {
+      if (readLine(line)) {
+        return {
+          content: fullContent,
+          tokens: totalTokens,
+          ms: Date.now() - start,
+        }
+      }
+    }
+  }
+
+  buffer += decoder.decode()
+  if (buffer.trim()) {
+    readLine(buffer)
+  }
+
+  return {
+    content: fullContent,
+    tokens: totalTokens,
+    ms: Date.now() - start,
   }
 }
 
@@ -196,6 +352,70 @@ export async function structuredChat<T>(
   }
 }
 
+export async function embedText(text: string): Promise<number[]> {
+  const sanitized = sanitizeAiText(text, 500)
+  if (!sanitized) throw new Error("Embedding input is empty")
+
+  const cacheKey = getEmbeddingCacheKey(sanitized)
+  const cached = getEmbeddingCache(cacheKey)
+  if (cached) return cached
+
+  const start = Date.now()
+  try {
+    let response = await fetch(`${OLLAMA_HOST}/api/embeddings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: EMBEDDING_MODEL,
+        prompt: sanitized,
+      }),
+    })
+
+    if (response.status === 404) {
+      response = await fetch(`${OLLAMA_HOST}/api/embed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: EMBEDDING_MODEL,
+          input: sanitized,
+        }),
+      })
+    }
+
+    if (!response.ok) {
+      throw new Error(await getOllamaErrorMessage(response))
+    }
+
+    const data = await response.json()
+    const vector = Array.isArray(data.embedding)
+      ? data.embedding
+      : Array.isArray(data.embeddings?.[0])
+        ? data.embeddings[0]
+        : null
+
+    if (!vector || vector.length !== EMBEDDING_DIM) {
+      throw new Error(
+        `Embedding dimension mismatch: expected ${EMBEDDING_DIM}, got ${vector?.length ?? 0}`
+      )
+    }
+
+    setEmbeddingCache(cacheKey, vector)
+    return vector
+  } catch (error) {
+    await logAiAction({
+      action: "embed",
+      model: EMBEDDING_MODEL,
+      prompt: sanitized.slice(0, 200),
+      tokens: null,
+      ms: Date.now() - start,
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }).catch(() => {})
+    console.error("[Ollama Embedding Error]:", error)
+    throw error
+  }
+}
+
 export async function generateDigest(
   articles: {
     title: string
@@ -227,7 +447,10 @@ Highlight the most important breaking stories.`
   return result.content
 }
 
-export async function managerChat(messages: OllamaMessage[], context: any) {
+export async function managerChat(
+  messages: OllamaMessage[],
+  context: ManagerContext
+) {
   const systemPrompt = `You are the LivePulse Manager AI. 
 Current System Context:
 - Total Articles: ${context.totalArticles}

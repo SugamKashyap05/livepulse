@@ -1,5 +1,6 @@
 import Header from "@/components/Header"
 import DigestClient from "@/components/DigestClient"
+import { getArticleLink } from "@/lib/articleLinks"
 import { prisma } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
@@ -12,15 +13,23 @@ export default async function DigestPage() {
   })
 
   const topArticles = await prisma.newsArticle.findMany({
+    where: { published: true },
     orderBy: { pubDate: "desc" },
     take: 5,
-    select: { title: true, source: true, topic: true, link: true },
+    select: {
+      id: true,
+      title: true,
+      source: true,
+      topic: true,
+      link: true,
+      aiGenerated: true,
+    },
   })
 
   return (
     <>
       <Header />
-      <main style={{ maxWidth: 800, margin: "0 auto", padding: "40px 24px" }}>
+      <main className="public-page-shell" style={{ maxWidth: 800, margin: "0 auto", padding: "40px 24px" }}>
         <div style={{ marginBottom: 32 }}>
           <div style={{
             fontFamily: "'IBM Plex Mono', monospace",
@@ -37,7 +46,7 @@ export default async function DigestPage() {
               day: "numeric",
             })}
           </div>
-          <h1 style={{
+          <h1 className="public-page-title" style={{
             fontFamily: "'Playfair Display', serif",
             fontSize: 40,
             fontWeight: 900,
@@ -53,7 +62,17 @@ export default async function DigestPage() {
             color: "var(--muted)",
             marginTop: 8,
           }}>
-            AI-generated summary of today's top news
+            AI-generated summary of today&apos;s top news
+          </p>
+          <p style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 10,
+            color: "var(--muted)",
+            marginTop: 8,
+            letterSpacing: "0.6px",
+            textTransform: "uppercase",
+          }}>
+            Published public coverage only
           </p>
         </div>
 
@@ -73,14 +92,12 @@ export default async function DigestPage() {
             color: "var(--muted)",
             marginBottom: 12,
           }}>
-            Today's Top Headlines
+            Today&apos;s Top Headlines
           </div>
           {topArticles.map((a, i) => (
             <a
               key={i}
-              href={a.link}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={getArticleLink(a)}
               style={{
                 display: "flex",
                 gap: 12,
@@ -120,6 +137,16 @@ export default async function DigestPage() {
               </div>
             </a>
           ))}
+          {topArticles.length === 0 && (
+            <div style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 11,
+              color: "var(--muted)",
+              padding: "10px 0",
+            }}>
+              No published headlines are available yet.
+            </div>
+          )}
         </div>
 
         <DigestClient initialDigest={existing?.content || null} />

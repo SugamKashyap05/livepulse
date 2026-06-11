@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation"
+import Link from "next/link"
 import ArticleFeed from "@/components/ArticleFeed"
 import Header from "@/components/Header"
 import { getCurrentUserId } from "@/lib/auth"
@@ -20,7 +21,7 @@ export default async function BookmarksPage() {
   return (
     <>
       <Header />
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 24px" }}>
+      <main className="public-page-shell" style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 24px" }}>
         <div style={{
           marginBottom: 24,
           fontFamily: "'IBM Plex Mono', monospace",
@@ -44,7 +45,18 @@ export default async function BookmarksPage() {
             fontFamily: "'IBM Plex Mono', monospace",
             color: "var(--muted)",
           }}>
-            No bookmarks yet. Save articles from the home page.
+            No bookmarks yet.{" "}
+            <Link
+              href="/"
+              style={{
+                color: "var(--accent)",
+                display: "inline-flex",
+                minHeight: 44,
+                alignItems: "center",
+              }}
+            >
+              Browse the feed
+            </Link>
           </div>
         )}
       </main>

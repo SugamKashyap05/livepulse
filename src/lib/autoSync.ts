@@ -1,7 +1,10 @@
 import { fetchFeedsWithStatus } from "@/lib/fetchFeeds"
 import { prisma } from "@/lib/db"
+import { embedText } from "@/lib/ollama"
+import { triggerRagReindex } from "@/lib/ragReindexTrigger"
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000
+const MAX_CONSECUTIVE_FEED_ERRORS = 5
 
 let isSyncing = false
 let syncCount = 0
@@ -34,15 +37,29 @@ async function runSync() {
         region: source.region || "global",
         enabled: true,
         priority: source.priority || 5,
+        fetchIntervalMinutes: 30,
         lastFetched: null,
         lastStatus: null,
         failCount: 0,
+        lastErrorAt: null,
+        lastErrorMessage: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       }))
     }
 
-    const { articles, successNames, failedNames } =
+    const now = Date.now()
+    dbSources = dbSources.filter((source) => {
+      if (!source.lastFetched) return true
+      return now - source.lastFetched.getTime() >= source.fetchIntervalMinutes * 60 * 1000
+    })
+
+    if (dbSources.length === 0) {
+      console.log("[LivePulse AutoSync] No sources are due for fetching yet")
+      return
+    }
+
+    const { articles, successNames, failedNames, failedSources } =
       await fetchFeedsWithStatus(dbSources)
 
     const slugMap = Object.fromEntries(
@@ -93,28 +110,46 @@ async function runSync() {
       }
     }
 
-    await prisma.newsArticle.deleteMany({
-      where: {
-        fetchedAt: {
-          lt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3),
-        },
-        aiGenerated: false,
-      },
-    })
-
     if (successNames.length > 0) {
       await prisma.feedSource.updateMany({
         where: { name: { in: successNames } },
-        data: { lastFetched: new Date(), lastStatus: "ok", failCount: 0 },
+        data: {
+          lastFetched: new Date(),
+          lastStatus: "ok",
+          failCount: 0,
+          lastErrorAt: null,
+          lastErrorMessage: null,
+        },
       })
     }
 
     if (failedNames.length > 0) {
-      await prisma.feedSource.updateMany({
-        where: { name: { in: failedNames } },
-        data: {
-          lastStatus: "error",
-          failCount: { increment: 1 },
+      for (const failedSource of failedSources) {
+        const current = dbSources.find((source) => source.name === failedSource.name)
+        const nextFailCount = (current?.failCount ?? 0) + 1
+        await prisma.feedSource.updateMany({
+          where: { name: failedSource.name },
+          data: {
+            enabled: nextFailCount < MAX_CONSECUTIVE_FEED_ERRORS,
+            lastStatus: "error",
+            failCount: { increment: 1 },
+            lastErrorAt: new Date(),
+            lastErrorMessage:
+              nextFailCount >= MAX_CONSECUTIVE_FEED_ERRORS
+                ? `Disabled after ${nextFailCount} consecutive errors: ${failedSource.error}`
+                : failedSource.error,
+          },
+        })
+      }
+    }
+
+    if (articles.length > 0) {
+      await prisma.newsArticle.deleteMany({
+        where: {
+          fetchedAt: {
+            lt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3),
+          },
+          aiGenerated: false,
         },
       })
     }
@@ -125,6 +160,12 @@ async function runSync() {
       `skipped: ${skipped},`,
       `total: ${articles.length}`
     )
+
+    triggerRagReindex()
+
+    if (process.env.NODE_ENV === "development" && syncCount === 1) {
+      embedText("warmup").catch(() => {})
+    }
   } catch (error) {
     console.error(`[LivePulse AutoSync] Sync #${syncCount} failed:`, error)
   } finally {

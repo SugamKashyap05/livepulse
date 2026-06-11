@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
+import ArticleAiPanel from "@/components/ArticleAiPanel"
 import Header from "@/components/Header"
 import NewsCard from "@/components/NewsCard"
 import { getCurrentUserId } from "@/lib/auth"
@@ -40,7 +41,10 @@ export default async function AiReportPage({ params }: AiReportPageProps) {
   return (
     <>
       <Header />
-      <main style={{ maxWidth: 920, margin: "0 auto", padding: "40px 24px 80px" }}>
+      <main
+        className="article-detail-shell"
+        style={{ maxWidth: 920, margin: "0 auto", padding: "40px 24px 80px" }}
+      >
         <article>
           <div style={{
             marginBottom: 20,
@@ -70,7 +74,7 @@ export default async function AiReportPage({ params }: AiReportPageProps) {
 
           <h1 style={{
             fontFamily: "'Playfair Display', serif",
-            fontSize: 48,
+            fontSize: "clamp(24px, 5vw, 48px)",
             lineHeight: 1.05,
             fontWeight: 900,
             margin: "0 0 22px",
@@ -90,8 +94,11 @@ export default async function AiReportPage({ params }: AiReportPageProps) {
               background: "var(--surface)",
             }}>
               <img
+                className="article-detail-image"
                 src={article.image}
                 alt={article.title}
+                loading="eager"
+                decoding="async"
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             </div>
@@ -150,6 +157,20 @@ export default async function AiReportPage({ params }: AiReportPageProps) {
             </div>
           )}
         </article>
+
+        <div style={{ marginTop: 36 }}>
+          <ArticleAiPanel
+            article={{
+              id: article.id,
+              title: article.title,
+              description: article.description || article.summary || "",
+              topic: article.topic,
+              summary: article.summary,
+              sentiment: article.sentiment,
+              aiTags: article.aiTags,
+            }}
+          />
+        </div>
 
         {related.length > 0 && (
           <section style={{ marginTop: 48 }}>

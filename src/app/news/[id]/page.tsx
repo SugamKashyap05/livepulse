@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from "date-fns"
+import Link from "next/link"
 import { notFound } from "next/navigation"
 import ArticleAiPanel from "@/components/ArticleAiPanel"
 import Header from "@/components/Header"
@@ -35,11 +36,11 @@ export default async function ArticleDetailPage({
   return (
     <>
       <Header />
-      <main style={{ minHeight: "100vh" }}>
-        <div style={{
+      <main style={{ minHeight: "100dvh" }}>
+        <div className="article-detail-shell" style={{
           maxWidth: 720,
           margin: "0 auto",
-          padding: "48px 24px",
+          padding: "clamp(24px, 4vw, 48px) clamp(16px, 3vw, 24px)",
         }}>
           <div style={{
             fontFamily: "var(--font-mono)",
@@ -52,7 +53,7 @@ export default async function ArticleDetailPage({
             alignItems: "center",
             flexWrap: "wrap",
           }}>
-            <a href="/">Home</a>
+            <Link href="/">Home</Link>
             <span style={{ color: "var(--border2)" }}>{">"}</span>
             <a
               href={`/topic/${article.topic}`}
@@ -130,18 +131,21 @@ export default async function ArticleDetailPage({
             </h1>
 
             {article.image && (
-              <div style={{
+              <div className="article-hero-image" style={{
                 borderRadius: 6,
                 overflow: "hidden",
                 marginBottom: 32,
                 border: "1px solid var(--border)",
               }}>
                 <img
+                  className="article-detail-image"
                   src={article.image}
                   alt={article.title}
+                  loading="eager"
+                  decoding="async"
                   style={{
                     width: "100%",
-                    height: 400,
+                    height: "clamp(200px, 45vw, 400px)",
                     objectFit: "cover",
                     display: "block",
                   }}
@@ -150,7 +154,7 @@ export default async function ArticleDetailPage({
             )}
 
             {article.description && (
-              <div style={{
+              <div className="article-analysis-grid" style={{
                 fontFamily: "var(--font-body)",
                 fontSize: 17,
                 lineHeight: 1.85,
@@ -178,14 +182,14 @@ export default async function ArticleDetailPage({
             />
 
             {article.aiGenerated && (article.factScore !== null || article.biasAnalysis) && (
-              <div style={{
+              <div className="agent-analysis-grid" style={{
                 padding: "16px 20px",
                 background: "var(--surface)",
                 border: "1px solid var(--border)",
                 borderRadius: 6,
                 marginBottom: 32,
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
+                gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
                 gap: 20,
               }}>
                 {article.factScore !== null && (
@@ -229,6 +233,7 @@ export default async function ArticleDetailPage({
             )}
 
             <a
+              className="article-cta-btn"
               href={article.aiGenerated ? `/ai-news/${article.id}` : article.link}
               target={article.aiGenerated ? undefined : "_blank"}
               rel={article.aiGenerated ? undefined : "noopener noreferrer"}
