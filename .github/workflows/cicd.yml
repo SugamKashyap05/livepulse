@@ -47,18 +47,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Cache Next.js build cache
-        uses: actions/cache@v4
+        uses: actions/cache@0c45773b623bea8c8e7586c8b721855909282240
         with:
           path: |
             ~/.npm
@@ -80,7 +80,7 @@ jobs:
         run: npm run lint
 
       - name: Secret scan
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@83373cf5846171b78297b4ec845f949b29cf3c72
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -98,12 +98,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 2
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -112,12 +112,12 @@ jobs:
         run: npm ci
 
       - name: Semgrep SAST
-        uses: semgrep/semgrep-action@v1
+        uses: semgrep/semgrep-action@713efdd29472e3995f32a76202476b7e012e6931
         with:
           config: p/default
 
       - name: OWASP dependency check
-        uses: dependency-check/Dependency-Check_Action@main
+        uses: dependency-check/Dependency-Check_Action@1e54355a8b4c8abaa8cc7d0b70aa655a3bb15a6c
         with:
           project: livepulse
           path: .
@@ -129,7 +129,7 @@ jobs:
 
       - name: Upload OWASP report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
         with:
           name: owasp-dependency-check-report
           path: reports
@@ -152,10 +152,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Dependency review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48
         with:
           fail-on-severity: high
 
@@ -171,18 +171,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 2
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Cache Next.js build cache
-        uses: actions/cache@v4
+        uses: actions/cache@0c45773b623bea8c8e7586c8b721855909282240
         with:
           path: |
             ~/.npm
@@ -223,7 +223,7 @@ jobs:
       - name: Create Neon validation branch
         if: steps.prisma_changes.outputs.changed == 'true' && env.NEON_API_KEY != '' && env.NEON_PROJECT_ID != ''
         id: neon_branch
-        uses: neondatabase/create-branch-action@v5
+        uses: neondatabase/create-branch-action@fb620d43d4c565abaf088b848a4e28e5c4ea4d9c
         with:
           project_id: ${{ env.NEON_PROJECT_ID }}
           branch_name: ci-${{ github.run_id }}-${{ github.run_attempt }}
@@ -249,7 +249,7 @@ jobs:
 
       - name: Delete Neon validation branch
         if: always() && steps.neon_branch.outputs.branch_id != ''
-        uses: neondatabase/delete-branch-action@v3
+        uses: neondatabase/delete-branch-action@aed9ab1ec86e380312c7b0a9e29942e41349adf6
         with:
           project_id: ${{ env.NEON_PROJECT_ID }}
           branch_id: ${{ steps.neon_branch.outputs.branch_id }}
@@ -272,10 +272,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -326,10 +326,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -370,10 +370,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -403,10 +403,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
