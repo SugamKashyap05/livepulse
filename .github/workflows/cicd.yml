@@ -1,4 +1,4 @@
-name: LivePulse CI/CD
++name: LivePulse CI/CD
 
 on:
   push:
@@ -320,6 +320,7 @@ jobs:
     environment: preview
     permissions:
       contents: read
+      pull-requests: write
 
     outputs:
       deployment_url: ${{ steps.deploy.outputs.deployment_url }}
@@ -359,6 +360,22 @@ jobs:
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Comment on PR with preview URL
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const deploymentUrl = '${{ steps.deploy.outputs.deployment_url }}';
+            const body = `🚀 **Vercel Preview Deployment** is ready!\n\n- **Preview URL:** [${deploymentUrl}](${deploymentUrl})\n\nBuilt and deployed via CI/CD pipeline.`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: body
+            });
 
   health-rollback:
     name: Stage 5 - Health + rollback
