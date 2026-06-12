@@ -77,7 +77,7 @@ export default function ChatWidget() {
           transition: "all 0.2s",
         }}
       >
-        {open ? "✕" : "✦"}
+        {open ? "x" : "+"}
       </button>
 
       {/* Chat window */}
@@ -126,7 +126,7 @@ export default function ChatWidget() {
                 fontSize: 9,
                 color: "var(--muted)",
               }}>
-                Ask about today's news
+                Ask about today&apos;s news
               </div>
             </div>
           </div>
@@ -151,7 +151,7 @@ export default function ChatWidget() {
                   color: "var(--muted)",
                   marginBottom: 16,
                 }}>
-                  Ask anything about today's news
+                  Ask anything about today&apos;s news
                 </div>
                 {[
                   "What happened in tech today?",

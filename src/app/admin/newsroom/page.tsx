@@ -9,8 +9,8 @@ export default async function NewsroomPage() {
     take: 20,
   })
 
-  // Convert Date objects to strings for the client component
-  const serializedActivity = activity.map((a: any) => ({
+  // Convert Date objects to strings for the client component.
+  const serializedActivity = activity.map((a) => ({
     ...a,
     createdAt: a.createdAt.toISOString()
   }))

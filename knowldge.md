@@ -1,6 +1,6 @@
 # LivePulse Project Knowledge
 
-Last updated: 2026-06-07
+Last updated: 2026-06-12
 
 This file is the working project memory for LivePulse. Update it after every code edit so future work can start here before re-reading the full repository.
 
@@ -71,6 +71,29 @@ Do not write secret values into this file.
 - `src/instrumentation.ts`: when `NEXT_RUNTIME === "nodejs"` and `NODE_ENV === "development"`, dynamically imports `startAutoSync()` and starts a local server-side sync loop. Production relies on Vercel cron.
 
 ## Recent UI Polish
+
+2026-06-12:
+
+- CI/CD pipeline foundation:
+  - Added `.github/workflows/cicd.yml` following the five-stage plan:
+    - Stage 1 quality gate on push/PR: install, Prisma generate, `npm run typecheck`, `npm run lint`, Gitleaks secret scan, and `npm audit --audit-level=high`.
+    - Stage 2 security gate on push/workflow dispatch: Semgrep SAST, OWASP dependency check report, static security header verification, and admin/user auth coverage verification. PRs run dependency review as a summary-style security pass.
+    - Stage 3 build + database gate on push/workflow dispatch: Prisma validate, `npm run build`, `.next/static` bundle size check, and optional Neon branch migration validation when Prisma files change and Neon CI variables are configured.
+    - Stage 4 deploy: Vercel preview deploys for `develop`, `feature/*`, `hotfix/*`, and internal PRs; production deploys for `main`.
+    - Stage 5 health + rollback: smoke checks public `/`, protected `/admin`, protected `/api/admin/ping`, and protected `/api/sync`; production rollback is attempted on failed post-deploy smoke checks.
+  - Added package scripts:
+    - `npm run typecheck`
+    - `npm run ci:headers`
+    - `npm run ci:auth-coverage`
+    - `npm run ci:smoke`
+  - Added CI helper scripts in `scripts/ci/`:
+    - `verify-security-headers.mjs`
+    - `verify-auth-coverage.mjs`
+    - `smoke.mjs`
+  - `eslint.config.mjs` now ignores `prisma/seeds/**` so app linting is not blocked by legacy seed utility CommonJS files.
+  - Fixed current lint errors in app code: removed `any` in admin newsroom serialization, escaped `ChatWidget` JSX apostrophes and replaced legacy glyphs, stabilized `AdminNotificationProvider` callback dependencies, and removed the synchronous state-setting effect in `AdminSidebar`.
+  - Verification: `npm run ci:headers` passed, `npm run ci:auth-coverage` passed, `npm run lint` passed with warnings only, `npm run typecheck` passed, and `npm run build` passed.
+  - Known blocker: networked `npm audit --audit-level=high` currently fails as intended on high advisories in `next`, `@neondatabase/auth`/`better-auth`, and `ngrok`. The CI quality gate will stay red until those dependencies are remediated or an explicit risk decision changes the audit policy.
 
 2026-06-07:
 

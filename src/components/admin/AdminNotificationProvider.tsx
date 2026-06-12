@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { CSSProperties, ReactNode } from "react"
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 
 type NotificationJob = {
   id: string
@@ -57,7 +57,7 @@ export default function AdminNotificationProvider({
   const pathname = usePathname()
   const isLoginPage = pathname === "/admin/login"
 
-  async function refresh(): Promise<boolean> {
+  const refresh = useCallback(async (): Promise<boolean> => {
     if (isLoginPage) return false
 
     try {
@@ -96,7 +96,7 @@ export default function AdminNotificationProvider({
       console.error("[admin notifications] refresh failed:", error)
       return false
     }
-  }
+  }, [isLoginPage])
 
   useEffect(() => {
     if (isLoginPage) return
@@ -117,11 +117,11 @@ export default function AdminNotificationProvider({
       stopped = true
       if (timeout) clearTimeout(timeout)
     }
-  }, [isLoginPage])
+  }, [isLoginPage, refresh])
 
   const value = useMemo(
     () => ({ notifications, unreadCount, refresh }),
-    [notifications, unreadCount]
+    [notifications, unreadCount, refresh]
   )
 
   return (
