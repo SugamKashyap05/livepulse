@@ -15,6 +15,18 @@ export const DEPARTMENTS = [
     ],
   },
   {
+    id: "fetch_news",
+    label: "Fetch News",
+    route: "/admin/ai-manager/fetch-news",
+    agent: "Ingestion Desk",
+    description: "Runs RSS sync, watches source health, and keeps fresh articles flowing.",
+    staff: [
+      { name: "Feed Producer", role: "Manual sync", focus: "Runs news fetches when the newsroom needs fresh source material." },
+      { name: "Source Monitor", role: "Health desk", focus: "Tracks failed, disabled, stale, and due RSS sources." },
+      { name: "Auto Sync Clerk", role: "Schedule watch", focus: "Checks interval settings and suggests source cleanup." },
+    ],
+  },
+  {
     id: "reporting",
     label: "Reporting Room",
     route: "/admin/ai-manager/reporting",
@@ -140,6 +152,7 @@ export function isAdminDepartmentId(value: string): value is AdminDepartmentId {
 
 export function normalizeDepartmentSlug(value: string): AdminDepartmentId | null {
   if (value === "copy-desk") return "copy_desk"
+  if (value === "fetch-news") return "fetch_news"
   if (isAdminDepartmentId(value)) return value
   const routeMatch = DEPARTMENT_BY_ROUTE.get(value)
   return routeMatch?.id ?? null
@@ -159,6 +172,7 @@ export function departmentForJobType(type: string): AdminDepartmentId {
 }
 
 export function departmentForAiAction(action: string): AdminDepartmentId {
+  if (action.includes("sync") || action.includes("feed") || action.includes("source")) return "fetch_news"
   if (action.includes("rag") || action.includes("embed")) return "research"
   if (action.includes("digest")) return "digest"
   if (action.includes("scout")) return "reporting"
@@ -339,6 +353,7 @@ export async function getDepartmentSummaries() {
 }
 
 export function jobTypesForDepartment(department: AdminDepartmentId) {
+  if (department === "fetch_news") return []
   if (department === "reporting" || department === "verification") return ["newsroom_cycle"]
   if (department === "copy_desk") return ["ai_batch"]
   if (department === "research") return ["rag_reindex"]

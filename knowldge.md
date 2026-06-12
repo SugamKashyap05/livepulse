@@ -797,6 +797,12 @@ All admin pages use `src/app/admin/layout.tsx`, which renders `AdminSidebar` and
   - Ran `UPDATE "NewsArticle" SET topic = LOWER(topic);`.
   - Distinct topics in PostgreSQL verified as `business`, `india`, `science`, `sports`, `technology`, `world`.
   - Verification: `npx prisma migrate status` reported database schema up to date; authenticated `/admin` loaded with Dashboard and Total Articles; `npx tsc --noEmit` passed.
+- Auth/mobile testing note:
+  - Neon Auth signup works when the upstream origin is `http://localhost:3000`.
+  - The active ngrok origin `https://stephan-terpeneless-decrepitly.ngrok-free.dev` was rejected by Neon Auth with `403 INVALID_ORIGIN`.
+  - `/signup` and `/login` now map Neon Auth failures into safer, specific user messages for invalid origin, auth unreachable, duplicate signup email, and generic credential failures; server actions also log sanitized auth error details.
+  - `NewsCard` mobile action buttons use direct pointer/touch activation with duplicate synthetic-click suppression, and bookmark failures now show visible feedback such as "Sign in to save bookmarks."
+  - Verification: direct Neon Auth endpoint checks returned `200` for localhost origin and `403 INVALID_ORIGIN` for the ngrok origin; `npx tsc --noEmit` passed.
 
 ## How To Keep This File Updated
 

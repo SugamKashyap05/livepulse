@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server"
 import { auth, isNeonAuthConfigured } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { ALL_TOPICS } from "@/lib/sources"
 
-const VALID_TOPICS = new Set([
-  "world",
-  "technology",
-  "india",
-  "business",
-  "science",
-  "sports",
-])
+const VALID_TOPICS = new Set(
+  ALL_TOPICS.filter((topic) => topic.slug !== "all").map((topic) => topic.slug)
+)
 
 function normalizeTopics(topics: unknown) {
   if (!Array.isArray(topics)) return []

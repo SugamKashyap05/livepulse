@@ -1,10 +1,12 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { auth, isNeonAuthConfigured } from "@/lib/auth"
+import { safeLocalRedirect } from "@/lib/redirects"
 
 type SignupPageProps = {
   searchParams?: Promise<{
     error?: string
+    next?: string
   }>
 }
 
@@ -18,34 +20,88 @@ async function signUpAction(formData: FormData) {
   const name = String(formData.get("name") || "")
   const email = String(formData.get("email") || "")
   const password = String(formData.get("password") || "")
+  const next = safeLocalRedirect(formData.get("next"), "/")
 
   if (password.length < 8) {
-    redirect("/signup?error=password_length")
+    redirect(`/signup?error=password_length&next=${encodeURIComponent(next)}`)
   }
 
   const { error } = await auth.signUp.email({
-    name,
-    email,
+    name: name.trim(),
+    email: email.trim().toLowerCase(),
     password,
   })
 
   if (error) {
-    redirect("/signup?error=signup_failed")
+    const code = getSignupErrorCode(error)
+    redirect(`/signup?error=${code}&next=${encodeURIComponent(next)}`)
   }
 
-  redirect("/onboarding")
+  redirect(`/onboarding?next=${encodeURIComponent(next)}`)
+}
+
+function getSignupErrorCode(error: unknown) {
+  const details = getAuthErrorDetails(error)
+  console.warn("[LivePulse Auth] Signup failed", details)
+
+  if (details.code === "INVALID_ORIGIN" || details.message.includes("invalid origin")) {
+    return "invalid_origin"
+  }
+
+  if (
+    details.status === 409 ||
+    details.code === "USER_ALREADY_EXISTS" ||
+    details.message.includes("already") ||
+    details.message.includes("exists")
+  ) {
+    return "email_exists"
+  }
+
+  if (
+    details.status === 502 ||
+    details.code.startsWith("NETWORK_") ||
+    details.message.includes("network") ||
+    details.message.includes("fetch")
+  ) {
+    return "auth_unreachable"
+  }
+
+  return "signup_failed"
+}
+
+function getAuthErrorDetails(error: unknown) {
+  const value = error as {
+    code?: unknown
+    message?: unknown
+    status?: unknown
+    statusText?: unknown
+  }
+
+  return {
+    code: typeof value?.code === "string" ? value.code : "",
+    message: typeof value?.message === "string" ? value.message.toLowerCase() : "",
+    status: typeof value?.status === "number" ? value.status : null,
+    statusText: typeof value?.statusText === "string" ? value.statusText : "",
+  }
 }
 
 export default async function SignupPage({ searchParams }: SignupPageProps) {
   const params = searchParams ? await searchParams : {}
+  const next = safeLocalRedirect(params.next, "/")
   const errorMessage =
     params.error === "auth_not_configured"
       ? "Neon Auth is not configured yet. Add NEON_AUTH_BASE_URL and NEON_AUTH_COOKIE_SECRET."
       : params.error === "password_length"
         ? "Password must be at least 8 characters."
-        : params.error
-          ? "Unable to create that account."
-          : null
+        : params.error === "invalid_origin"
+          ? "This domain is not allowed in Neon Auth. Add your localhost, ngrok, or Vercel URL to Neon Auth allowed origins."
+          : params.error === "email_exists"
+            ? "That email is already registered. Sign in instead."
+            : params.error === "auth_unreachable"
+              ? "Unable to reach Neon Auth right now. Check your network and Neon Auth URL."
+              : params.error
+                ? "Unable to create that account."
+                : null
 
   return (
     <main className="auth-shell" style={authShellStyle}>
@@ -66,6 +122,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
         </p>
 
         <form action={signUpAction} className="auth-card" style={formCardStyle}>
+          <input name="next" type="hidden" value={next} />
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Name</label>
             <input
@@ -111,7 +168,10 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           marginTop: 20,
         }}>
           Already have an account?{" "}
-          <Link href="/login" style={{ color: "var(--accent)" }}>
+          <Link
+            href={`/login?next=${encodeURIComponent(next)}`}
+            style={{ color: "var(--accent)" }}
+          >
             Sign in →
           </Link>
         </p>

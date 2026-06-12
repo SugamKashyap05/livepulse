@@ -39,6 +39,10 @@ export default function ProfilePage() {
     async function loadPreferences() {
       try {
         const response = await fetch("/api/user/preferences")
+        if (response.status === 401) {
+          router.push("/login?next=/profile")
+          return
+        }
         if (!response.ok) {
           setError("Unable to load preferences.")
           return
@@ -85,6 +89,11 @@ export default function ProfilePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ region, topics }),
       })
+
+      if (response.status === 401) {
+        router.push("/login?next=/profile")
+        return
+      }
 
       if (!response.ok) {
         setError("Unable to save preferences.")

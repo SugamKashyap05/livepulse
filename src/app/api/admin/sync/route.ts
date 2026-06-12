@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { isAdminAuthorized } from "@/lib/adminAuth"
 import { fetchFeedsWithStatus } from "@/lib/fetchFeeds"
 import { prisma } from "@/lib/db"
+import { createAdminActionEvent } from "@/lib/adminDepartments"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
@@ -50,6 +51,16 @@ export async function POST(request: Request) {
     })
 
     if (dbSources.length === 0) {
+      await createAdminActionEvent({
+        department: "fetch_news",
+        action: "manual_sync.no_due_sources",
+        title: "Manual sync skipped",
+        body: "No enabled source is due for fetching yet.",
+        severity: "info",
+        notify: false,
+        metadata: { targetType: "department" },
+      }).catch(() => {})
+
       return NextResponse.json({
         success: true,
         saved: 0,
@@ -147,6 +158,20 @@ export async function POST(request: Request) {
     }
 
     if (articles.length === 0) {
+      await createAdminActionEvent({
+        department: "fetch_news",
+        action: "manual_sync.no_articles",
+        title: "Manual sync found no articles",
+        body: `Fetched ${successNames.length} sources successfully and ${failedNames.length} failed, but no articles were returned.`,
+        severity: failedNames.length > 0 ? "warning" : "info",
+        notify: failedNames.length > 0,
+        metadata: {
+          targetType: "department",
+          ok: successNames.length,
+          failed: failedNames.length,
+        },
+      }).catch(() => {})
+
       return NextResponse.json({
         success: false,
         message: "No articles fetched",
@@ -167,6 +192,23 @@ export async function POST(request: Request) {
 
     console.log(`[LivePulse] Admin sync done - saved: ${saved}, skipped: ${skipped}`)
 
+    await createAdminActionEvent({
+      department: "fetch_news",
+      action: "manual_sync.completed",
+      title: "Manual RSS sync completed",
+      body: `Saved ${saved}, skipped ${skipped}, fetched ${articles.length}. Sources ok ${successNames.length}, failed ${failedNames.length}.`,
+      severity: failedNames.length > 0 ? "warning" : "success",
+      notify: failedNames.length > 0,
+      metadata: {
+        targetType: "department",
+        saved,
+        skipped,
+        total: articles.length,
+        ok: successNames.length,
+        failed: failedNames.length,
+      },
+    }).catch(() => {})
+
     return NextResponse.json({
       success: true,
       saved,
@@ -179,6 +221,17 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("[LivePulse] Admin sync failed:", error)
+    await createAdminActionEvent({
+      department: "fetch_news",
+      action: "manual_sync.failed",
+      title: "Manual RSS sync failed",
+      body: error instanceof Error ? error.message : "The manual RSS sync failed.",
+      severity: "error",
+      notify: true,
+      needsEditorReview: true,
+      metadata: { targetType: "department" },
+    }).catch(() => {})
+
     return NextResponse.json(
       { success: false, error: "An error occurred" },
       { status: 500 }

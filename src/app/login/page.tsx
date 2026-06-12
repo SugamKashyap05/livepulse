@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { auth, isNeonAuthConfigured } from "@/lib/auth"
+import { safeLocalRedirect } from "@/lib/redirects"
 
 type LoginPageProps = {
   searchParams?: Promise<{
@@ -18,24 +19,69 @@ async function signInAction(formData: FormData) {
 
   const email = String(formData.get("email") || "")
   const password = String(formData.get("password") || "")
-  const next = String(formData.get("next") || "/")
+  const next = safeLocalRedirect(formData.get("next"), "/")
 
-  const { error } = await auth.signIn.email({ email, password })
+  const { error } = await auth.signIn.email({
+    email: email.trim().toLowerCase(),
+    password,
+  })
   if (error) {
-    redirect("/login?error=invalid_credentials")
+    const code = getLoginErrorCode(error)
+    redirect(`/login?error=${code}&next=${encodeURIComponent(next)}`)
   }
 
-  redirect(next.startsWith("/") ? next : "/")
+  redirect(next)
+}
+
+function getLoginErrorCode(error: unknown) {
+  const details = getAuthErrorDetails(error)
+  console.warn("[LivePulse Auth] Login failed", details)
+
+  if (details.code === "INVALID_ORIGIN" || details.message.includes("invalid origin")) {
+    return "invalid_origin"
+  }
+
+  if (
+    details.status === 502 ||
+    details.code.startsWith("NETWORK_") ||
+    details.message.includes("network") ||
+    details.message.includes("fetch")
+  ) {
+    return "auth_unreachable"
+  }
+
+  return "invalid_credentials"
+}
+
+function getAuthErrorDetails(error: unknown) {
+  const value = error as {
+    code?: unknown
+    message?: unknown
+    status?: unknown
+    statusText?: unknown
+  }
+
+  return {
+    code: typeof value?.code === "string" ? value.code : "",
+    message: typeof value?.message === "string" ? value.message.toLowerCase() : "",
+    status: typeof value?.status === "number" ? value.status : null,
+    statusText: typeof value?.statusText === "string" ? value.statusText : "",
+  }
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = searchParams ? await searchParams : {}
+  const next = safeLocalRedirect(params.next, "/")
   const errorMessage =
     params.error === "auth_not_configured"
       ? "Neon Auth is not configured yet. Add NEON_AUTH_BASE_URL and NEON_AUTH_COOKIE_SECRET."
-      : params.error
-        ? "Unable to sign in with those credentials."
-        : null
+      : params.error === "invalid_origin"
+        ? "This domain is not allowed in Neon Auth. Add your localhost, ngrok, or Vercel URL to Neon Auth allowed origins."
+        : params.error === "auth_unreachable"
+          ? "Unable to reach Neon Auth right now. Check your network and Neon Auth URL."
+          : params.error
+            ? "Unable to sign in with those credentials."
+            : null
 
   return (
     <main className="auth-shell" style={authShellStyle}>
@@ -56,7 +102,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </p>
 
         <form action={signInAction} className="auth-card" style={formCardStyle}>
-          <input name="next" type="hidden" value={params.next || "/"} />
+          <input name="next" type="hidden" value={next} />
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Email</label>
             <input
@@ -92,7 +138,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           marginTop: 20,
         }}>
           Don&apos;t have an account?{" "}
-          <Link href="/signup" style={{ color: "var(--accent)" }}>
+          <Link
+            href={`/signup?next=${encodeURIComponent(next)}`}
+            style={{ color: "var(--accent)" }}
+          >
             Create one →
           </Link>
         </p>

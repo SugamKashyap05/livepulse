@@ -3,6 +3,7 @@ import DepartmentRoomClient from "@/components/admin/DepartmentRoomClient"
 import AssignmentDeskModule from "@/components/admin/rooms/AssignmentDeskModule"
 import CopyDeskModule from "@/components/admin/rooms/CopyDeskModule"
 import DigestRoomModule from "@/components/admin/rooms/DigestRoomModule"
+import FetchNewsRoomModule from "@/components/admin/rooms/FetchNewsRoomModule"
 import OperationsRoomModule from "@/components/admin/rooms/OperationsRoomModule"
 import PublishingDeskModule from "@/components/admin/rooms/PublishingDeskModule"
 import ResearchLibraryModule from "@/components/admin/rooms/ResearchLibraryModule"
@@ -113,6 +114,9 @@ function roomActions(department: AdminDepartmentId): RoomAction[] {
       { jobType: "ai_batch", label: "Run full copy batch", params: { task: "all", limit: 20 }, confirmLabel: "Preview full copy" },
     ]
   }
+  if (department === "fetch_news") {
+    return []
+  }
   if (department === "research") {
     return [
       { jobType: "rag_reindex", label: "Reindex missing", params: { mode: "missing", limit: 50 }, confirmLabel: "Preview missing" },
@@ -131,6 +135,7 @@ function roomActions(department: AdminDepartmentId): RoomAction[] {
       { jobType: "newsroom_cycle", label: "Prepare newsroom drafts", params: {}, confirmLabel: "Preview drafts" },
     ]
   }
+
   return [
     { jobType: "ai_batch", label: "Run health AI batch", params: { task: "all", limit: 10 }, confirmLabel: "Preview batch" },
     { jobType: "rag_reindex", label: "Check RAG queue", params: { mode: "missing", limit: 20 }, confirmLabel: "Preview RAG" },
@@ -174,6 +179,39 @@ async function getRoomMetrics(department: AdminDepartmentId): Promise<Metric[]> 
       { label: "Missing Summaries", value: missingSummary, tone: missingSummary > 0 ? "warn" : "good" },
       { label: "Missing Tags", value: missingTags, tone: missingTags > 0 ? "warn" : "good" },
       { label: "Missing Mood", value: missingSentiment, tone: missingSentiment > 0 ? "warn" : "good" },
+    ]
+  }
+
+  if (department === "fetch_news") {
+    const sources = await prisma.feedSource.findMany()
+    const now = Date.now()
+    const due = sources.filter(
+      (source) =>
+        source.enabled &&
+        (!source.lastFetched ||
+          now - source.lastFetched.getTime() >= source.fetchIntervalMinutes * 60 * 1000)
+    ).length
+    const failed = sources.filter(
+      (source) => source.enabled && source.lastStatus === "error"
+    ).length
+    const disabled = sources.filter((source) => !source.enabled).length
+    const neverFetched = sources.filter((source) => !source.lastFetched).length
+    const latestFetched = sources
+      .map((source) => source.lastFetched)
+      .filter((value): value is Date => Boolean(value))
+      .sort((a, b) => b.getTime() - a.getTime())[0]
+
+    return [
+      ...base,
+      { label: "Enabled Sources", value: sources.length - disabled, tone: "good" },
+      { label: "Due Now", value: due, tone: due > 0 ? "warn" : "good" },
+      { label: "Failed Sources", value: failed, tone: failed > 0 ? "bad" : "good" },
+      {
+        label: "Last Fetch",
+        value: latestFetched ? latestFetched.toLocaleString() : "Never",
+        tone: latestFetched ? "neutral" : "warn",
+      },
+      { label: "Never Fetched", value: neverFetched, tone: neverFetched > 0 ? "warn" : "good" },
     ]
   }
 
@@ -340,6 +378,7 @@ async function getDigestRoomData() {
       generatedAt: todayDigest?.createdAt.toISOString() ?? null,
       updatedAt: todayDigest?.createdAt.toISOString() ?? null,
       includedCount: includedArticles.length,
+      publicUrl: "/digest",
     },
     historyRows: historyRows.map((digest) => ({
       id: digest.id,
@@ -774,6 +813,103 @@ async function getVerificationRoomData() {
   }
 }
 
+async function getFetchNewsRoomData() {
+  const sources = await prisma.feedSource.findMany({
+    orderBy: [{ topic: "asc" }, { priority: "desc" }, { name: "asc" }],
+  })
+  const now = Date.now()
+
+  const enriched = sources.map((source) => {
+    const isDue =
+      source.enabled &&
+      (!source.lastFetched ||
+        now - source.lastFetched.getTime() >= source.fetchIntervalMinutes * 60 * 1000)
+
+    return {
+      id: source.id,
+      name: source.name,
+      topic: source.topic,
+      url: source.url,
+      enabled: source.enabled,
+      priority: source.priority,
+      fetchIntervalMinutes: source.fetchIntervalMinutes,
+      lastFetched: source.lastFetched?.toISOString() ?? null,
+      lastStatus: source.lastStatus,
+      failCount: source.failCount,
+      lastErrorAt: source.lastErrorAt?.toISOString() ?? null,
+      lastErrorMessage: source.lastErrorMessage,
+      isDue,
+    }
+  })
+
+  const topicMap = new Map<
+    string,
+    { topic: string; total: number; enabled: number; due: number; failed: number; disabled: number }
+  >()
+
+  for (const source of enriched) {
+    const row =
+      topicMap.get(source.topic) ??
+      { topic: source.topic, total: 0, enabled: 0, due: 0, failed: 0, disabled: 0 }
+    row.total += 1
+    if (source.enabled) row.enabled += 1
+    else row.disabled += 1
+    if (source.isDue) row.due += 1
+    if (source.lastStatus === "error") row.failed += 1
+    topicMap.set(source.topic, row)
+  }
+
+  const dueSources = enriched.filter((source) => source.isDue).slice(0, 12)
+  const failedSources = enriched
+    .filter((source) => source.lastStatus === "error" || !source.enabled)
+    .sort((a, b) => b.failCount - a.failCount || a.name.localeCompare(b.name))
+    .slice(0, 12)
+  const recentSources = enriched
+    .filter((source) => source.lastFetched)
+    .sort((a, b) =>
+      new Date(b.lastFetched ?? 0).getTime() - new Date(a.lastFetched ?? 0).getTime()
+    )
+    .slice(0, 12)
+
+  const totals = {
+    sources: enriched.length,
+    enabled: enriched.filter((source) => source.enabled).length,
+    disabled: enriched.filter((source) => !source.enabled).length,
+    due: dueSources.length,
+    failed: enriched.filter((source) => source.enabled && source.lastStatus === "error").length,
+    neverFetched: enriched.filter((source) => !source.lastFetched).length,
+  }
+
+  const recommendations = [
+    totals.due > 0
+      ? `Run sync now: ${totals.due} enabled sources are due.`
+      : "No manual sync needed yet; all enabled sources are inside their fetch interval.",
+    totals.failed > 0
+      ? `Review ${totals.failed} enabled failed sources before the next newsroom cycle.`
+      : "No enabled source is currently marked failed.",
+    totals.neverFetched > 0
+      ? `${totals.neverFetched} sources have never fetched; keep an eye on the next sync result.`
+      : "All enabled sources have fetched at least once.",
+    totals.disabled > 0
+      ? `${totals.disabled} disabled sources are parked for cleanup or replacement.`
+      : "No disabled sources are waiting for cleanup.",
+  ]
+
+  return {
+    totals,
+    autoSync: {
+      appIntervalLabel: "Every 5 minutes while app auto-sync is running",
+      sourceIntervalLabel: "Per source, usually 30 minutes",
+      note: "Auto-sync skips sources until their fetch interval expires. Manual sync uses the same due-source rules.",
+    },
+    topicRows: Array.from(topicMap.values()).sort((a, b) => a.topic.localeCompare(b.topic)),
+    dueSources,
+    failedSources,
+    recentSources,
+    recommendations,
+  }
+}
+
 export default async function DepartmentPage({
   params,
 }: {
@@ -797,6 +933,7 @@ export default async function DepartmentPage({
     assignmentData,
     reportingData,
     verificationData,
+    fetchNewsData,
   ] = await Promise.all([
     getRoomMetrics(department.id),
     prisma.adminDepartmentEvent.findMany({
@@ -868,6 +1005,7 @@ export default async function DepartmentPage({
     department.id === "assignment" ? getAssignmentDeskData() : Promise.resolve(null),
     department.id === "reporting" ? getReportingRoomData() : Promise.resolve(null),
     department.id === "verification" ? getVerificationRoomData() : Promise.resolve(null),
+    department.id === "fetch_news" ? getFetchNewsRoomData() : Promise.resolve(null),
   ])
 
   const serializedEvents = events.map((event) => ({
@@ -903,6 +1041,9 @@ export default async function DepartmentPage({
           activeJobCount={assignmentData.activeJobCount}
           pendingJobCount={assignmentData.pendingJobCount}
         />
+      )}
+      {department.id === "fetch_news" && fetchNewsData && (
+        <FetchNewsRoomModule data={fetchNewsData} />
       )}
       {department.id === "reporting" && reportingData && (
         <ReportingRoomModule

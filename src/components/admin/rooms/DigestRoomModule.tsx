@@ -16,6 +16,7 @@ export type DigestToday = {
   updatedAt?: string | Date | null
   includedCount?: number | null
   error?: string | null
+  publicUrl?: string | null
 }
 
 export type DigestHistoryRow = {
@@ -100,6 +101,7 @@ export default function DigestRoomModule({
   const sortedHistory = useMemo(() => [...history].sort((a, b) => digestTime(b) - digestTime(a)), [history])
   const sortedArticles = useMemo(() => [...articles].sort((a, b) => articleScore(b) - articleScore(a)), [articles])
   const publicLabel = visibility.isPublic ? "Visible" : "Private"
+  const publicDigestUrl = today.publicUrl ?? visibility.publicUrl ?? null
 
   async function runAction(action: DigestAction) {
     if (action === "regenerate" && !confirm("Regenerate today's digest and replace its current preview?")) return
@@ -174,7 +176,11 @@ export default function DigestRoomModule({
             onClick={() => runAction("generate")}
             style={buttonStateStyle(primaryButtonStyle, working !== null, working === "generate")}
           >
-            {working === "generate" ? "GENERATING..." : "GENERATE TODAY"}
+            {working === "generate"
+              ? "PUBLISHING..."
+              : today.id
+                ? "PUBLISH UPDATE"
+                : "PUBLISH TODAY"}
           </button>
           <button
             type="button"
@@ -184,9 +190,9 @@ export default function DigestRoomModule({
           >
             {working === "regenerate" ? "REGENERATING..." : "REGENERATE"}
           </button>
-          {visibility.publicUrl && (
-            <a href={visibility.publicUrl} target="_blank" rel="noreferrer" style={viewLinkStyle}>
-              PUBLIC URL
+          {publicDigestUrl && (
+            <a href={publicDigestUrl} target="_blank" rel="noreferrer" style={viewLinkStyle}>
+              VIEW PUBLIC DIGEST
             </a>
           )}
           {onRefresh && (
@@ -378,6 +384,10 @@ function buttonStateStyle(base: CSSProperties, disabled: boolean, active = false
 const shellStyle: CSSProperties = {
   display: "grid",
   gap: 14,
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  overflow: "hidden",
 }
 
 const noticeStyle: CSSProperties = {
@@ -407,13 +417,15 @@ const noticeCloseStyle: CSSProperties = {
 
 const summaryGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(140px, 100%), 1fr))",
   gap: 10,
+  minWidth: 0,
 }
 
 const summaryCellStyle: CSSProperties = {
   display: "grid",
   gap: 6,
+  minWidth: 0,
   padding: 12,
   background: "var(--surface)",
   border: "1px solid var(--border)",
@@ -425,9 +437,10 @@ const summaryCellStyle: CSSProperties = {
 
 const heroPanelStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))",
   gap: 16,
   alignItems: "start",
+  minWidth: 0,
   padding: 16,
   background: "var(--surface)",
   border: "1px solid var(--border)",
@@ -450,6 +463,7 @@ const digestTitleStyle: CSSProperties = {
   color: "var(--text)",
   fontSize: 20,
   lineHeight: 1.25,
+  overflowWrap: "anywhere",
 }
 
 const digestPreviewStyle: CSSProperties = {
@@ -457,18 +471,21 @@ const digestPreviewStyle: CSSProperties = {
   color: "var(--muted)",
   fontSize: 13,
   lineHeight: 1.6,
+  overflowWrap: "anywhere",
 }
 
 const heroActionsStyle: CSSProperties = {
   display: "grid",
   gap: 8,
+  minWidth: 0,
 }
 
 const mainGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))",
   gap: 14,
   alignItems: "start",
+  minWidth: 0,
 }
 
 const panelStyle: CSSProperties = {
@@ -493,6 +510,7 @@ const panelHeaderStyle: CSSProperties = {
 const sideStackStyle: CSSProperties = {
   display: "grid",
   gap: 14,
+  minWidth: 0,
 }
 
 const listStyle: CSSProperties = {
@@ -500,11 +518,13 @@ const listStyle: CSSProperties = {
   gap: 10,
   maxHeight: 720,
   overflowY: "auto",
+  minWidth: 0,
 }
 
 const itemStyle: CSSProperties = {
   display: "grid",
   gap: 8,
+  minWidth: 0,
   padding: 12,
   background: "var(--surface2)",
   border: "1px solid var(--border)",
@@ -526,6 +546,7 @@ const itemTitleStyle: CSSProperties = {
   color: "var(--text)",
   fontSize: 14,
   lineHeight: 1.35,
+  overflowWrap: "anywhere",
 }
 
 const descriptionStyle: CSSProperties = {
@@ -533,6 +554,7 @@ const descriptionStyle: CSSProperties = {
   color: "var(--muted)",
   fontSize: 12,
   lineHeight: 1.55,
+  overflowWrap: "anywhere",
 }
 
 const visibilityGridStyle: CSSProperties = {
@@ -572,6 +594,7 @@ const historyListStyle: CSSProperties = {
   gap: 10,
   maxHeight: 500,
   overflowY: "auto",
+  minWidth: 0,
 }
 
 const historyItemStyle: CSSProperties = {
@@ -593,6 +616,7 @@ const historyTitleStyle: CSSProperties = {
   color: "var(--text)",
   fontSize: 13,
   lineHeight: 1.35,
+  overflowWrap: "anywhere",
 }
 
 const historyPreviewStyle: CSSProperties = {

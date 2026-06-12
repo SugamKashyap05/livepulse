@@ -195,7 +195,7 @@ export default function DepartmentRoomClient({
   }
 
   return (
-    <div aria-busy={isBusy}>
+    <div aria-busy={isBusy} style={shellStyle}>
       <div style={topBarStyle}>
         <Link href="/admin/ai-manager" style={backLinkStyle}>
           AI MANAGER
@@ -438,6 +438,13 @@ const topBarStyle: CSSProperties = {
   letterSpacing: "1px",
 }
 
+const shellStyle: CSSProperties = {
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  overflow: "hidden",
+}
+
 const backLinkStyle: CSSProperties = {
   color: "var(--accent)",
   textDecoration: "none",
@@ -445,6 +452,7 @@ const backLinkStyle: CSSProperties = {
 
 const heroStyle: CSSProperties = {
   display: "flex",
+  flexWrap: "wrap",
   justifyContent: "space-between",
   gap: 20,
   alignItems: "flex-start",
@@ -480,9 +488,10 @@ const copyStyle: CSSProperties = {
 
 const metricGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))",
   gap: 10,
   marginBottom: 16,
+  minWidth: 0,
 }
 
 const noticeStyle: CSSProperties = {
@@ -514,9 +523,10 @@ const noticeCloseStyle: CSSProperties = {
 
 const staffGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(190px, 100%), 1fr))",
   gap: 10,
   marginBottom: 16,
+  minWidth: 0,
 }
 
 const staffCardStyle: CSSProperties = {
@@ -565,12 +575,14 @@ const metricCardStyle: CSSProperties = {
 
 const mainGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(320px, 0.9fr) minmax(360px, 1.1fr)",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))",
   gap: 16,
   marginBottom: 16,
+  minWidth: 0,
 }
 
 const panelStyle: CSSProperties = {
+  minWidth: 0,
   background: "var(--surface)",
   border: "1px solid var(--border)",
   borderRadius: 6,
@@ -590,8 +602,9 @@ const panelHeaderStyle: CSSProperties = {
 
 const actionGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))",
   gap: 8,
+  minWidth: 0,
 }
 
 const actionButtonStyle: CSSProperties = {
@@ -655,6 +668,7 @@ const compactListStyle: CSSProperties = {
 const compactItemStyle: CSSProperties = {
   display: "grid",
   gap: 5,
+  minWidth: 0,
   padding: 10,
   background: "var(--surface2)",
   border: "1px solid var(--border)",
@@ -669,6 +683,7 @@ const eventListStyle: CSSProperties = {
   gap: 10,
   maxHeight: 620,
   overflowY: "auto",
+  minWidth: 0,
 }
 
 const skeletonStackStyle: CSSProperties = {
@@ -688,6 +703,7 @@ const skeletonLineStyle: CSSProperties = {
 }
 
 const eventItemStyle: CSSProperties = {
+  minWidth: 0,
   padding: 12,
   background: "var(--surface2)",
   border: "1px solid var(--border)",
@@ -696,6 +712,7 @@ const eventItemStyle: CSSProperties = {
 
 const eventMetaStyle: CSSProperties = {
   display: "flex",
+  flexWrap: "wrap",
   justifyContent: "space-between",
   gap: 10,
   color: "var(--muted)",
@@ -707,6 +724,7 @@ const eventTitleStyle: CSSProperties = {
   margin: "8px 0 4px",
   color: "var(--text)",
   fontSize: 13,
+  overflowWrap: "anywhere",
 }
 
 const eventBodyStyle: CSSProperties = {
@@ -714,6 +732,7 @@ const eventBodyStyle: CSSProperties = {
   color: "var(--muted)",
   fontSize: 12,
   lineHeight: 1.6,
+  overflowWrap: "anywhere",
 }
 
 const jobMiniStyle: CSSProperties = {
@@ -721,6 +740,7 @@ const jobMiniStyle: CSSProperties = {
   color: "var(--accent)",
   fontFamily: "var(--font-mono)",
   fontSize: 10,
+  overflowWrap: "anywhere",
 }
 
 const eventActionsStyle: CSSProperties = {
@@ -744,12 +764,15 @@ const smallButtonStyle: CSSProperties = {
 const jobListStyle: CSSProperties = {
   display: "grid",
   gap: 8,
+  minWidth: 0,
 }
 
 const jobItemStyle: CSSProperties = {
   display: "flex",
+  flexWrap: "wrap",
   justifyContent: "space-between",
   gap: 12,
+  minWidth: 0,
   padding: 10,
   background: "var(--surface2)",
   border: "1px solid var(--border)",
