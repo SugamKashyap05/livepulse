@@ -112,7 +112,7 @@ jobs:
         run: npm ci
 
       - name: Semgrep SAST
-        uses: semgrep/semgrep-action@713efdd29472e3995f32a76202476b7e012e6931
+        uses: semgrep/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d
         with:
           config: p/default
 
