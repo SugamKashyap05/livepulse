@@ -60,13 +60,14 @@ export default function AssignmentDeskModule({
   jobEndpoint = "/api/admin/ai/jobs",
   jobPayloads,
 }: AssignmentDeskModuleProps) {
+  const [prevJobs, setPrevJobs] = useState(jobs)
   const [rows, setRows] = useState(jobs)
+  if (jobs !== prevJobs) {
+    setPrevJobs(jobs)
+    setRows(jobs)
+  }
   const [working, setWorking] = useState<DeskAction | null>(null)
   const [notice, setNotice] = useState<Notice>(null)
-
-  useEffect(() => {
-    setRows(jobs)
-  }, [jobs])
 
   const sortedJobs = useMemo(
     () =>

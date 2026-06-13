@@ -80,11 +80,12 @@ export default function ResearchLibraryModule({
   const [notice, setNotice] = useState<Notice>(null)
   const [query, setQuery] = useState("")
   const [testResult, setTestResult] = useState<ResearchLibraryTestResult | null>(null)
+  const [prevIndexEvents, setPrevIndexEvents] = useState(indexEvents)
   const [events, setEvents] = useState(indexEvents)
-
-  useEffect(() => {
+  if (indexEvents !== prevIndexEvents) {
+    setPrevIndexEvents(indexEvents)
     setEvents(indexEvents)
-  }, [indexEvents])
+  }
 
   const coveragePercent = useMemo(() => {
     if (metrics.totalArticles <= 0) return 0

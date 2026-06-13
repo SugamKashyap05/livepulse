@@ -87,16 +87,19 @@ export default function DigestRoomModule({
 }: DigestRoomModuleProps) {
   const [working, setWorking] = useState<DigestAction | null>(null)
   const [notice, setNotice] = useState<Notice>(null)
+  const [prevHistoryRows, setPrevHistoryRows] = useState(historyRows)
   const [history, setHistory] = useState(historyRows)
-  const [articles, setArticles] = useState(includedArticles)
-
-  useEffect(() => {
+  if (historyRows !== prevHistoryRows) {
+    setPrevHistoryRows(historyRows)
     setHistory(historyRows)
-  }, [historyRows])
+  }
 
-  useEffect(() => {
+  const [prevIncludedArticles, setPrevIncludedArticles] = useState(includedArticles)
+  const [articles, setArticles] = useState(includedArticles)
+  if (includedArticles !== prevIncludedArticles) {
+    setPrevIncludedArticles(includedArticles)
     setArticles(includedArticles)
-  }, [includedArticles])
+  }
 
   const sortedHistory = useMemo(() => [...history].sort((a, b) => digestTime(b) - digestTime(a)), [history])
   const sortedArticles = useMemo(() => [...articles].sort((a, b) => articleScore(b) - articleScore(a)), [articles])

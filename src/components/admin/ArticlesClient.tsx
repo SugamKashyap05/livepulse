@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 
 type Article = {
   id: string
@@ -29,31 +29,29 @@ export default function ArticlesClient({
   const [search, setSearch] = useState("")
   const [topicFilter, setTopicFilter] = useState("all")
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [deleted, setDeleted] = useState<Set<string>>(new Set())
+  const [deleted, setDeleted] = useState<Record<string, boolean>>({})
   const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const topics = ["all", ...Array.from(new Set(articles.map((a) => a.topic)))]
 
-  const filtered = useMemo(() => {
-    return articles.filter((a) => {
-      if (deleted.has(a.id)) return false
-      if (topicFilter !== "all" && a.topic !== topicFilter) return false
-      if (search) {
-        const q = search.toLowerCase()
-        return (
-          a.title.toLowerCase().includes(q) ||
-          a.source.toLowerCase().includes(q)
-        )
-      }
-      return true
-    })
-  }, [articles, search, topicFilter, deleted])
+  const filtered = articles.filter((a) => {
+    if (deleted[a.id]) return false
+    if (topicFilter !== "all" && a.topic !== topicFilter) return false
+    if (search) {
+      const q = search.toLowerCase()
+      return (
+        a.title.toLowerCase().includes(q) ||
+        a.source.toLowerCase().includes(q)
+      )
+    }
+    return true
+  })
 
   async function deleteArticle(id: string) {
     setDeleting(id)
     try {
       await fetch(`/api/admin/articles?id=${id}`, { method: "DELETE" })
-      setDeleted((p) => new Set([...p, id]))
+      setDeleted((p) => ({ ...p, [id]: true }))
     } finally {
       setDeleting(null)
     }
@@ -67,7 +65,13 @@ export default function ArticlesClient({
         `/api/admin/articles?topic=${topicFilter}&search=${search}`,
         { method: "DELETE" }
       )
-      setDeleted((p) => new Set([...p, ...filtered.map((a) => a.id)]))
+      setDeleted((p) => {
+        const next = { ...p }
+        filtered.forEach((a) => {
+          next[a.id] = true
+        })
+        return next
+      })
     } finally {
       setBulkDeleting(false)
     }

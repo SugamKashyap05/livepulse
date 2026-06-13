@@ -21,8 +21,7 @@
     "@neondatabase/neon-js": "^0.6.1-beta",
     "@prisma/client": "^5.22.0",
     "date-fns": "^4.1.0",
-    "next": "16.2.3",
-    "ngrok": "^5.0.0-beta.2",
+    "next": "16.2.9",
     "prisma": "^5.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -36,8 +35,13 @@
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.2.3",
+    "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "better-auth": "^1.6.15",
+    "postcss": "^8.5.10",
+    "uuid": "^11.1.1"
   }
 }

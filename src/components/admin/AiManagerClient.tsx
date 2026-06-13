@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import type { CSSProperties } from "react"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import MainEditorInboxPanel from "@/components/admin/MainEditorInboxPanel"
 
 type Log = {
@@ -200,6 +200,13 @@ function isLikelySameLocalMessage(a: ManagerMessage, b: ManagerMessage) {
   return a.content.trim() === b.content.trim()
 }
 
+function generateNoticeId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 export default function AiManagerClient({
   logs,
   digests,
@@ -257,14 +264,11 @@ export default function AiManagerClient({
   }, [streamingContent, messages])
 
   function addLocalNotice(tone: LocalNotice["tone"], text: string) {
-    const id =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const id = generateNoticeId()
     setLocalNotices((prev) => [...prev.slice(-2), { id, tone, text }])
   }
 
-  async function refreshSessions() {
+  const refreshSessions = useCallback(async () => {
     setSessionsLoading(true)
     try {
       const res = await fetch("/api/admin/ai/editor/sessions")
@@ -287,7 +291,7 @@ export default function AiManagerClient({
     } finally {
       setSessionsLoading(false)
     }
-  }
+  }, [])
 
   async function createEditorSession() {
     setSessionsLoading(true)
@@ -306,7 +310,7 @@ export default function AiManagerClient({
     }
   }
 
-  async function refreshMessages() {
+  const refreshMessages = useCallback(async () => {
     setMessagesLoading(true)
     try {
       const params = new URLSearchParams({ sessionId: activeSessionId })
@@ -328,9 +332,9 @@ export default function AiManagerClient({
     } finally {
       setMessagesLoading(false)
     }
-  }
+  }, [activeSessionId])
 
-  async function refreshJobs() {
+  const refreshJobs = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/ai/jobs")
       if (!res.ok) return
@@ -339,9 +343,9 @@ export default function AiManagerClient({
     } catch (error) {
       console.error("[manager jobs] refresh failed:", error)
     }
-  }
+  }, [])
 
-  async function refreshEditorInbox() {
+  const refreshEditorInbox = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/ai/editor/inbox")
       if (!res.ok) return
@@ -350,7 +354,7 @@ export default function AiManagerClient({
     } catch (error) {
       console.error("[manager editor inbox] refresh failed:", error)
     }
-  }
+  }, [])
 
   async function recoverJobs() {
     if (recoveringJobs) return
@@ -389,18 +393,34 @@ export default function AiManagerClient({
   }
 
   useEffect(() => {
-    refreshSessions()
-    refreshJobs()
-    refreshEditorInbox()
+    let active = true
+    const init = async () => {
+      if (!active) return
+      await refreshSessions()
+      await refreshJobs()
+      await refreshEditorInbox()
+    }
+    init()
     const interval = setInterval(() => {
-      refreshJobs()
+      if (active) refreshJobs()
     }, 5000)
-    return () => clearInterval(interval)
-  }, [])
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [refreshSessions, refreshJobs, refreshEditorInbox])
 
   useEffect(() => {
-    refreshMessages()
-  }, [activeSessionId])
+    let active = true
+    const init = async () => {
+      if (!active) return
+      await refreshMessages()
+    }
+    init()
+    return () => {
+      active = false
+    }
+  }, [activeSessionId, refreshMessages])
 
   useEffect(() => {
     const interval = setInterval(async () => {

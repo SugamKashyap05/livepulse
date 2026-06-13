@@ -42,18 +42,22 @@ export default function PublishingDeskModule({
   publicBasePath = "/ai-news",
   onRefresh,
 }: PublishingDeskModuleProps) {
+  const [prevPendingDrafts, setPrevPendingDrafts] = useState(pendingDrafts)
   const [pending, setPending] = useState(pendingDrafts)
+  if (pendingDrafts !== prevPendingDrafts) {
+    setPrevPendingDrafts(pendingDrafts)
+    setPending(pendingDrafts)
+  }
+
+  const [prevPublishedReports, setPrevPublishedReports] = useState(publishedReports)
   const [published, setPublished] = useState(publishedReports)
+  if (publishedReports !== prevPublishedReports) {
+    setPrevPublishedReports(publishedReports)
+    setPublished(publishedReports)
+  }
+
   const [working, setWorking] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice>(null)
-
-  useEffect(() => {
-    setPending(pendingDrafts)
-  }, [pendingDrafts])
-
-  useEffect(() => {
-    setPublished(publishedReports)
-  }, [publishedReports])
 
   const sortedPending = useMemo(() => sortReports(pending), [pending])
   const sortedPublished = useMemo(() => sortReports(published), [published])
