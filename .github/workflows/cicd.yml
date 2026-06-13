@@ -1,4 +1,4 @@
-+name: LivePulse CI/CD
+name: LivePulse CI/CD
 
 on:
   push:
@@ -58,7 +58,7 @@ jobs:
           cache: npm
 
       - name: Cache Next.js build cache
-        uses: actions/cache@0c45773b623bea8c8e7586c8b721855909282240
+        uses: actions/cache@d4323d4df10fd90518776846175f3484f937d577
         with:
           path: |
             ~/.npm
@@ -182,7 +182,7 @@ jobs:
           cache: npm
 
       - name: Cache Next.js build cache
-        uses: actions/cache@0c45773b623bea8c8e7586c8b721855909282240
+        uses: actions/cache@d4323d4df10fd90518776846175f3484f937d577
         with:
           path: |
             ~/.npm
