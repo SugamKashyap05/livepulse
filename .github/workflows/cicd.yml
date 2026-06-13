@@ -58,7 +58,7 @@ jobs:
           cache: npm
 
       - name: Cache Next.js build cache
-        uses: actions/cache@d4323d4df10fd90518776846175f3484f937d577
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57
         with:
           path: |
             ~/.npm
@@ -80,7 +80,7 @@ jobs:
         run: npm run lint
 
       - name: Secret scan
-        uses: gitleaks/gitleaks-action@83373cf5846171b78297b4ec845f949b29cf3c72
+        uses: gitleaks/gitleaks-action@83373cf2f8c4db6e24b41c1a9b086bb9619e9cd3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -182,7 +182,7 @@ jobs:
           cache: npm
 
       - name: Cache Next.js build cache
-        uses: actions/cache@d4323d4df10fd90518776846175f3484f937d577
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57
         with:
           path: |
             ~/.npm
