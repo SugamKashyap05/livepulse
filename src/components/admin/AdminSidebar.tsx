@@ -12,6 +12,7 @@ const NAV = [
   { label: "Sources", href: "/admin/sources", icon: "S" },
   { label: "Articles", href: "/admin/articles", icon: "A" },
   { label: "Health", href: "/admin/health", icon: "H" },
+  { label: "Analytics", href: "/admin/analytics", icon: "📊" },
   { label: "Settings", href: "/admin/settings", icon: "SET" },
 ]
 

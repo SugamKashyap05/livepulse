@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { NewsItem } from "@/types/news"
 import { getInternalArticleLink } from "@/lib/articleLinks"
 import { trackContextEvent } from "@/lib/contextTelemetry"
+import { showFeedbackToast } from "@/components/FeedbackToast"
 import type { NewsGridFeedContext } from "@/components/NewsGrid"
 
 const TOPIC_COLORS: Record<string, string> = {
@@ -86,7 +87,8 @@ export default function NewsCard({
   const [loadingSentiment, setLoadingSentiment] = useState(false)
   const [loadingTags, setLoadingTags] = useState(false)
   const [bookmarked, setBookmarked] = useState<boolean>(item.isBookmarked ?? false)
-  const [feedback, setFeedback] = useState<"like" | "dislike" | null>(null)
+  const [liked, setLiked] = useState(false)
+  const [disliked, setDisliked] = useState(false)
   const [hidden, setHidden] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
@@ -338,20 +340,38 @@ export default function NewsCard({
     trackCardEvent("read")
   }
 
-  function handlePreference(
+  function handleLike(
     e:
       | React.MouseEvent<HTMLButtonElement>
       | React.PointerEvent<HTMLButtonElement>
-      | React.TouchEvent<HTMLButtonElement>,
-    preference: "like" | "dislike"
+      | React.TouchEvent<HTMLButtonElement>
   ) {
     e.stopPropagation()
     e.preventDefault()
     if (shouldIgnoreFollowUpClick(e)) return
 
-    const nextPreference = feedback === preference ? null : preference
-    setFeedback(nextPreference)
-    if (nextPreference) trackCardEvent(nextPreference)
+    const nextLiked = !liked
+    setLiked(nextLiked)
+    if (nextLiked) setDisliked(false)
+    trackCardEvent(nextLiked ? "like" : "dislike")
+    if (nextLiked) showFeedbackToast("More stories like this")
+  }
+
+  function handleDislike(
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.PointerEvent<HTMLButtonElement>
+      | React.TouchEvent<HTMLButtonElement>
+  ) {
+    e.stopPropagation()
+    e.preventDefault()
+    if (shouldIgnoreFollowUpClick(e)) return
+
+    const nextDisliked = !disliked
+    setDisliked(nextDisliked)
+    if (nextDisliked) setLiked(false)
+    trackCardEvent(nextDisliked ? "dislike" : "like")
+    if (nextDisliked) showFeedbackToast("Fewer stories like this")
   }
 
   function handleHide(
@@ -366,6 +386,10 @@ export default function NewsCard({
 
     setHidden(true)
     trackCardEvent("hide")
+    showFeedbackToast("Article hidden", {
+      label: "Undo",
+      onClick: () => setHidden(false),
+    })
   }
 
   async function handleShare(
@@ -378,19 +402,26 @@ export default function NewsCard({
     e.preventDefault()
     if (shouldIgnoreFollowUpClick(e)) return
 
+    const shareUrl = `${window.location.origin}${articleHref}`
     trackCardEvent("share")
-    const url = new URL(articleHref, window.location.origin).toString()
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: item.title, url })
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: item.title, url: shareUrl })
         return
+      } catch {
+        // User cancelled or API unavailable — fall through to clipboard
       }
-      await navigator.clipboard?.writeText(url)
-      setAiError("Link copied.")
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      showFeedbackToast("Link copied to clipboard")
     } catch {
-      setAiError("Could not share this article.")
+      showFeedbackToast("Could not copy link")
     }
   }
+
 
   function handleTouchAction<T extends HTMLButtonElement>(
     event: React.PointerEvent<T> | React.TouchEvent<T>,
@@ -403,7 +434,23 @@ export default function NewsCard({
   const sentimentCfg =
     SENTIMENT_CONFIG[sentiment as keyof typeof SENTIMENT_CONFIG]
 
-  if (hidden) return null
+  if (hidden) {
+    return (
+      <article
+        className="news-card news-card--hidden"
+        style={{
+          minHeight: 0,
+          overflow: "hidden",
+          maxHeight: 0,
+          opacity: 0,
+          margin: 0,
+          padding: 0,
+          border: "none",
+          transition: "max-height 0.35s ease, opacity 0.25s ease, margin 0.35s ease",
+        }}
+      />
+    )
+  }
 
   return (
     <article
@@ -880,19 +927,19 @@ export default function NewsCard({
       }}>
         <FeedbackButton
           label="More"
-          active={feedback === "like"}
+          active={liked}
           title="Show more like this"
-          onClick={(event) => handlePreference(event, "like")}
-          onPointerUp={(event) => handleTouchAction(event, (touchEvent) => handlePreference(touchEvent, "like"))}
-          onTouchEnd={(event) => handleTouchAction(event, (touchEvent) => handlePreference(touchEvent, "like"))}
+          onClick={handleLike}
+          onPointerUp={(event) => handleTouchAction(event, handleLike)}
+          onTouchEnd={(event) => handleTouchAction(event, handleLike)}
         />
         <FeedbackButton
           label="Less"
-          active={feedback === "dislike"}
+          active={disliked}
           title="Show less like this"
-          onClick={(event) => handlePreference(event, "dislike")}
-          onPointerUp={(event) => handleTouchAction(event, (touchEvent) => handlePreference(touchEvent, "dislike"))}
-          onTouchEnd={(event) => handleTouchAction(event, (touchEvent) => handlePreference(touchEvent, "dislike"))}
+          onClick={handleDislike}
+          onPointerUp={(event) => handleTouchAction(event, handleDislike)}
+          onTouchEnd={(event) => handleTouchAction(event, handleDislike)}
         />
         <FeedbackButton
           label="Share"
