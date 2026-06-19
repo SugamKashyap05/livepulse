@@ -443,6 +443,7 @@ model UserArticleEvent {
   source      String?
   sessionId   String?
   pageViewId  String?
+  userAgent   String?
   context     Json?
   occurredAt  DateTime @default(now())
   createdAt   DateTime @default(now())
@@ -452,6 +453,7 @@ model UserArticleEvent {
   @@index([userId, occurredAt])
   @@index([anonymousId, occurredAt])
   @@index([articleId, type, occurredAt])
+  @@index([articleId, occurredAt])
   @@index([type, occurredAt])
   @@index([sessionId])
   @@index([feedScope, occurredAt])

@@ -12,6 +12,7 @@ export type FeedScope = "home" | "topic" | "search" | "tag" | "ai-news" | "bookm
 export type FeedPageOptions = {
   scope: FeedScope
   userId?: string | null
+  sessionId?: string | null
   topicSlug?: string | null
   sentiment?: string | null
   q?: string | null
@@ -236,7 +237,7 @@ async function getArticleFeedPage(options: FeedPageOptions): Promise<FeedPage> {
 
   const pageRows = rows.slice(0, limit)
   const hasMore = rows.length > limit
-  const ranked = await rankArticlesForUser(pageRows, options.userId)
+  const ranked = await rankArticlesForUser(pageRows, options.userId, options.sessionId)
   const marked = await markUserState(ranked, options.userId)
 
   return {

@@ -16,6 +16,7 @@ const TOPICS = ALL_TOPICS.filter((topic) => topic.slug !== "all")
 type PreferencesResponse = {
   region: string | null
   topics: string[]
+  personalizationEnabled: boolean
   user?: {
     name: string | null
     email: string | null
@@ -28,6 +29,7 @@ export default function ProfilePage() {
   const [email, setEmail] = useState<string | null>(null)
   const [region, setRegion] = useState("global")
   const [topics, setTopics] = useState<string[]>([])
+  const [personalizationEnabled, setPersonalizationEnabled] = useState(true)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -54,6 +56,7 @@ export default function ProfilePage() {
           setEmail(data.user?.email ?? null)
           setRegion(data.region ?? "global")
           setTopics(data.topics ?? [])
+          setPersonalizationEnabled(data.personalizationEnabled ?? true)
         }
       } catch {
         if (!cancelled) setError("Unable to load preferences.")
@@ -114,6 +117,49 @@ export default function ProfilePage() {
     router.push("/")
   }
 
+  async function handleTogglePersonalization() {
+    setSaving(true)
+    try {
+      const res = await fetch("/api/user/privacy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle_personalization" }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setPersonalizationEnabled(data.personalizationEnabled)
+      } else {
+        setError("Could not update privacy setting.")
+      }
+    } catch {
+      setError("Could not update privacy setting.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleResetData() {
+    if (!window.confirm("Are you sure? This will reset your personalized news feed recommendations. This cannot be undone.")) return
+    
+    setSaving(true)
+    try {
+      const res = await fetch("/api/user/privacy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset_profile" }),
+      })
+      if (res.ok) {
+        alert("Your personalization data has been reset.")
+      } else {
+        setError("Could not reset data.")
+      }
+    } catch {
+      setError("Could not reset data.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <main style={pageStyle}>
       <form onSubmit={handleSave} style={panelStyle}>
@@ -161,6 +207,60 @@ export default function ProfilePage() {
                 </button>
               )
             })}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 32, borderTop: "1px solid var(--border)", paddingTop: 24 }}>
+          <div style={eyebrowStyle}>Privacy & Data</div>
+          
+          <div style={{ marginTop: 16, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20 }}>
+            <div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", marginBottom: 4 }}>
+                Personalized Feed
+              </div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", lineHeight: 1.4 }}>
+                Allow LivePulse to use your reading history and feedback to recommend articles you might like.
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={loading || saving}
+              onClick={handleTogglePersonalization}
+              style={{
+                ...buttonStyle,
+                background: personalizationEnabled ? "var(--accent)" : "transparent",
+                color: personalizationEnabled ? "var(--bg)" : "var(--muted)",
+                borderColor: personalizationEnabled ? "var(--accent)" : "var(--border)",
+                minWidth: 80,
+              }}
+            >
+              {personalizationEnabled ? "Enabled" : "Disabled"}
+            </button>
+          </div>
+
+          <div style={{ marginTop: 24, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20 }}>
+            <div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", marginBottom: 4 }}>
+                Reset Personalization Data
+              </div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", lineHeight: 1.4 }}>
+                Clear your aggregated interest profile. This will reset your feed recommendations to default.
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={loading || saving}
+              onClick={handleResetData}
+              style={{
+                ...buttonStyle,
+                background: "transparent",
+                color: "var(--negative)",
+                borderColor: "var(--negative)",
+                opacity: 0.8,
+              }}
+            >
+              Reset Data
+            </button>
           </div>
         </div>
 

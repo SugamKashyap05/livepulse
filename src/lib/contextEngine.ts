@@ -285,7 +285,8 @@ async function updateUserContext({
 
 export async function rankArticlesForUser<T extends { id: string; topic: string; source: string; pubDate: Date }>(
   articles: T[],
-  userId?: string | null
+  userId?: string | null,
+  sessionId?: string | null
 ) {
   if (!userId || articles.length < 2) return articles
 
@@ -301,6 +302,13 @@ export async function rankArticlesForUser<T extends { id: string; topic: string;
       where: { userId },
       select: { personalizationEnabled: true },
     }),
+    sessionId ? prisma.userArticleEvent.findMany({
+      where: {
+        sessionId,
+        occurredAt: { gte: new Date(Date.now() - 30 * 60000) },
+      },
+      select: { type: true, durationMs: true, scrollDepth: true, article: { select: { topic: true } } }
+    }) : Promise.resolve([]),
   ])
 
   if (userProfile?.personalizationEnabled === false) return articles
@@ -308,27 +316,79 @@ export async function rankArticlesForUser<T extends { id: string; topic: string;
   const contextMap = new Map(contexts.map((context) => [context.articleId, context]))
   const topicWeights = parseWeights(interestProfile?.topicWeights)
   const sourceWeights = parseWeights(interestProfile?.sourceWeights)
+  
+  const sessionWeights: WeightedMap = {}
+  for (const event of (sessionEvents as Array<{ type: string; durationMs: number | null; scrollDepth: number | null; article: { topic: string } | null }>)) {
+    if (!event.article) continue
+    const scoreDelta = scoreContextEvent({ type: event.type as ContextEventType, durationMs: event.durationMs ?? undefined, scrollDepth: event.scrollDepth ?? undefined })
+    addWeight(sessionWeights, event.article.topic, scoreDelta * 1.5) // Boost recent intent
+  }
 
-  return [...articles].sort((a, b) => {
-    const aContext = contextMap.get(a.id)
-    const bContext = contextMap.get(b.id)
-    const aScore = feedScore(a, aContext, topicWeights, sourceWeights)
-    const bScore = feedScore(b, bContext, topicWeights, sourceWeights)
-    if (bScore !== aScore) return bScore - aScore
-    return b.pubDate.getTime() - a.pubDate.getTime()
+  // Identify cold-start
+  const isColdStart = Object.keys(topicWeights).length === 0
+
+  const scoredArticles = articles.map((article, index) => {
+    const aContext = contextMap.get(article.id)
+    // Add exploration factor (15% chance to apply random boost for cold start)
+    const isExploration = isColdStart && (index % 7 === 0)
+    const rawScore = feedScore(article, aContext, topicWeights, sourceWeights, sessionWeights, isExploration)
+    return { article, score: rawScore, mmrScore: rawScore }
   })
+
+  // Apply MMR (Maximal Marginal Relevance) Diversity
+  const ranked: T[] = []
+  const pickedTopics = new Map<string, number>()
+  const pickedSources = new Map<string, number>()
+
+  let pool = [...scoredArticles]
+  
+  while (pool.length > 0) {
+    // Re-calculate MMR scores dynamically
+    pool.forEach(item => {
+      const topicCount = pickedTopics.get(item.article.topic.toLowerCase()) ?? 0
+      const sourceCount = pickedSources.get(item.article.source.toLowerCase()) ?? 0
+      
+      // 0.8^k penalty for topic, 0.9^k penalty for source
+      const topicPenalty = Math.pow(0.8, topicCount)
+      const sourcePenalty = Math.pow(0.9, sourceCount)
+      
+      // We don't want negative scores to flip sign when multiplied by penalties, 
+      // so we apply it primarily to the positive component, but simple multiplication works okay if bounded.
+      // Better: adjust if score > 0, else keep it.
+      item.mmrScore = item.score > 0 ? item.score * topicPenalty * sourcePenalty : item.score
+    })
+
+    // Sort to find the highest MMR score
+    pool.sort((a, b) => b.mmrScore - a.mmrScore || b.article.pubDate.getTime() - a.article.pubDate.getTime())
+    
+    const best = pool.shift()!
+    ranked.push(best.article)
+    
+    // Update diversity state
+    const topic = best.article.topic.toLowerCase()
+    const source = best.article.source.toLowerCase()
+    pickedTopics.set(topic, (pickedTopics.get(topic) ?? 0) + 1)
+    pickedSources.set(source, (pickedSources.get(source) ?? 0) + 1)
+  }
+
+  return ranked
 }
 
 function feedScore(
   article: { topic: string; source: string; pubDate: Date },
   context: Prisma.UserArticleContextGetPayload<object> | undefined,
   topicWeights: WeightedMap,
-  sourceWeights: WeightedMap
+  sourceWeights: WeightedMap,
+  sessionWeights: WeightedMap,
+  isExploration: boolean
 ) {
   const hoursOld = Math.max((Date.now() - article.pubDate.getTime()) / 3600000, 0)
-  const freshness = Math.max(0, 8 - hoursOld / 12)
-  const topic = topicWeights[article.topic.toLowerCase()] ?? 0
-  const source = sourceWeights[article.source.toLowerCase()] ?? 0
+  // Exponential decay
+  const freshness = 10 * Math.exp(-0.05 * hoursOld)
+  
+  const topicScore = (topicWeights[article.topic.toLowerCase()] ?? 0) + (sessionWeights[article.topic.toLowerCase()] ?? 0)
+  const sourceScore = sourceWeights[article.source.toLowerCase()] ?? 0
+  
   const behavior = context
     ? context.score * 0.4
       - context.readCount * 2
@@ -337,5 +397,11 @@ function feedScore(
       + (context.bookmarked ? 3 : 0)
     : 0
 
-  return freshness + topic * 0.25 + source * 0.12 + behavior
+  let score = freshness + topicScore * 0.25 + sourceScore * 0.12 + behavior
+  
+  if (isExploration) {
+    score += 5 // Fixed boost to surface exploratory content
+  }
+
+  return score
 }
