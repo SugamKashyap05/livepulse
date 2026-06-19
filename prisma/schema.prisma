@@ -488,6 +488,8 @@ model UserArticleContext {
   @@unique([userId, articleId])
   @@index([userId, score])
   @@index([userId, updatedAt])
+  @@index([userId, lastEngagedAt])
+  @@index([userId, lastSeenAt])
   @@index([articleId])
 }
 
@@ -500,6 +502,9 @@ model UserInterestProfile {
   lastEventAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([lastEventAt])
+  @@index([updatedAt])
 }
 
 model FeedSource {

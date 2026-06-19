@@ -43,13 +43,8 @@ export async function POST(request: Request) {
       }))
     }
 
-    const now = Date.now()
-    dbSources = dbSources.filter((source) => {
-      if (!source.lastFetched) return true
-      const intervalMs = source.fetchIntervalMinutes * 60 * 1000
-      return now - source.lastFetched.getTime() >= intervalMs
-    })
-
+    // For manual admin sync, we bypass the fetchIntervalMinutes check
+    // to force a refresh of all enabled sources.
     if (dbSources.length === 0) {
       await createAdminActionEvent({
         department: "fetch_news",

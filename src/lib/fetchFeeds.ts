@@ -35,7 +35,7 @@ function makeParser() {
     timeout: 10000,
     headers: {
       "User-Agent":
-        "LivePulse-NewsAggregator/1.0 (+https://livepulse.local/bot)",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 LivePulse/1.0",
       Accept:
         "application/rss+xml, application/xml, text/xml, application/atom+xml, */*",
       "Accept-Language": "en-US,en;q=0.9",
@@ -127,13 +127,13 @@ async function fetchWithFallback(url: string): Promise<string> {
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
-      "User-Agent":
-          "LivePulse-NewsAggregator/1.0 (+https://livepulse.local/bot)",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 LivePulse/1.0",
         Accept:
           "application/rss+xml, application/xml, text/xml, application/atom+xml, */*",
         "Accept-Language": "en-US,en;q=0.9",
       },
-      next: { revalidate: 300 },
+      cache: 'no-store',
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return await res.text()
@@ -145,6 +145,11 @@ async function fetchWithFallback(url: string): Promise<string> {
 async function parseFeed(source: SourceInput) {
   const parser = makeParser()
   const xml = await fetchWithFallback(source.url)
+  
+  if (xml.trim().toLowerCase().startsWith('<!doctype html') || xml.trim().toLowerCase().startsWith('<html')) {
+    throw new Error('Bot blocked by Cloudflare or firewall (Client Challenge)')
+  }
+  
   return parser.parseString(xml)
 }
 

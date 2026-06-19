@@ -177,8 +177,9 @@ export async function recordContextEvents({
     })),
   })
 
-  if (userId) {
-    await updateUserContext({ userId, events: validEvents, articleMap })
+  const targetId = userId ?? anonymousId
+  if (targetId) {
+    await updateUserContext({ userId: targetId, events: validEvents, articleMap })
   }
 
   return { accepted: validEvents.length }
@@ -193,93 +194,100 @@ async function updateUserContext({
   events: ContextEventInput[]
   articleMap: Map<string, { id: string; topic: string; source: string; aiTags: string | null }>
 }) {
-  const existingProfile = await prisma.userInterestProfile.findUnique({
-    where: { userId },
-  })
-  const topicWeights = parseWeights(existingProfile?.topicWeights)
-  const sourceWeights = parseWeights(existingProfile?.sourceWeights)
-  const tagWeights = parseWeights(existingProfile?.tagWeights)
-  let lastEventAt = existingProfile?.lastEventAt ?? null
+  await prisma.$transaction(async (tx) => {
+    const existingProfiles = await tx.$queryRaw<any[]>`SELECT * FROM "UserInterestProfile" WHERE "userId" = ${userId} FOR UPDATE`
+    const existingProfile = existingProfiles[0]
 
-  for (const event of events) {
-    const article = articleMap.get(event.articleId)
-    if (!article) continue
+    const topicWeights = parseWeights(existingProfile?.topicWeights)
+    const sourceWeights = parseWeights(existingProfile?.sourceWeights)
+    const tagWeights = parseWeights(existingProfile?.tagWeights)
+    let lastEventAt = existingProfile?.lastEventAt ? new Date(existingProfile.lastEventAt) : null
 
-    const scoreDelta = scoreContextEvent(event)
-    const occurredAt = event.occurredAt ?? new Date()
-    if (!lastEventAt || occurredAt > lastEventAt) lastEventAt = occurredAt
+    for (const event of events) {
+      const article = articleMap.get(event.articleId)
+      if (!article) continue
 
-    addWeight(topicWeights, article.topic, scoreDelta)
-    addWeight(sourceWeights, article.source, scoreDelta * 0.6)
-    for (const tag of parseTags(article.aiTags)) addWeight(tagWeights, tag, scoreDelta * 0.45)
+      const scoreDelta = scoreContextEvent(event)
+      const occurredAt = event.occurredAt ?? new Date()
+      if (!lastEventAt || occurredAt > lastEventAt) lastEventAt = occurredAt
 
-    await prisma.userArticleContext.upsert({
-      where: {
-        userId_articleId: {
+      addWeight(topicWeights, article.topic, scoreDelta)
+      addWeight(sourceWeights, article.source, scoreDelta * 0.6)
+      for (const tag of parseTags(article.aiTags)) addWeight(tagWeights, tag, scoreDelta * 0.45)
+
+      await tx.userArticleContext.upsert({
+        where: {
+          userId_articleId: {
+            userId,
+            articleId: event.articleId,
+          },
+        },
+        create: {
           userId,
           articleId: event.articleId,
+          impressionCount: event.type === "impression" ? 1 : 0,
+          clickCount: event.type === "click" ? 1 : 0,
+          readCount: event.type === "read" ? 1 : 0,
+          dwellMs: event.type === "dwell" ? event.durationMs ?? 0 : 0,
+          maxScrollDepth: event.scrollDepth,
+          bookmarked: event.type === "bookmark",
+          liked: event.type === "like",
+          disliked: event.type === "dislike",
+          hidden: event.type === "hide",
+          sharedCount: event.type === "share" ? 1 : 0,
+          commentCount: event.type === "comment" ? 1 : 0,
+          aiActionCount: event.type === "ai_action" ? 1 : 0,
+          lastSeenAt: ["impression", "dwell"].includes(event.type) ? occurredAt : null,
+          lastClickedAt: ["click", "read"].includes(event.type) ? occurredAt : null,
+          lastEngagedAt: ["bookmark", "like", "share", "comment", "ai_action"].includes(event.type)
+            ? occurredAt
+            : null,
+          score: scoreDelta,
         },
-      },
-      create: {
-        userId,
-        articleId: event.articleId,
-        impressionCount: event.type === "impression" ? 1 : 0,
-        clickCount: event.type === "click" ? 1 : 0,
-        readCount: event.type === "read" ? 1 : 0,
-        dwellMs: event.type === "dwell" ? event.durationMs ?? 0 : 0,
-        maxScrollDepth: event.scrollDepth,
-        bookmarked: event.type === "bookmark",
-        liked: event.type === "like",
-        disliked: event.type === "dislike",
-        hidden: event.type === "hide",
-        sharedCount: event.type === "share" ? 1 : 0,
-        commentCount: event.type === "comment" ? 1 : 0,
-        aiActionCount: event.type === "ai_action" ? 1 : 0,
-        lastSeenAt: ["impression", "dwell"].includes(event.type) ? occurredAt : null,
-        lastClickedAt: ["click", "read"].includes(event.type) ? occurredAt : null,
-        lastEngagedAt: ["bookmark", "like", "share", "comment", "ai_action"].includes(event.type)
-          ? occurredAt
-          : null,
-        score: scoreDelta,
-      },
-      update: {
-        impressionCount: event.type === "impression" ? { increment: 1 } : undefined,
-        clickCount: event.type === "click" ? { increment: 1 } : undefined,
-        readCount: event.type === "read" ? { increment: 1 } : undefined,
-        dwellMs: event.type === "dwell" ? { increment: event.durationMs ?? 0 } : undefined,
-        maxScrollDepth: event.scrollDepth,
-        bookmarked: event.type === "bookmark" ? true : event.type === "unbookmark" ? false : undefined,
-        liked: event.type === "like" ? true : event.type === "dislike" ? false : undefined,
-        disliked: event.type === "dislike" ? true : event.type === "like" ? false : undefined,
-        hidden: event.type === "hide" ? true : undefined,
-        sharedCount: event.type === "share" ? { increment: 1 } : undefined,
-        commentCount: event.type === "comment" ? { increment: 1 } : undefined,
-        aiActionCount: event.type === "ai_action" ? { increment: 1 } : undefined,
-        lastSeenAt: ["impression", "dwell"].includes(event.type) ? occurredAt : undefined,
-        lastClickedAt: ["click", "read"].includes(event.type) ? occurredAt : undefined,
-        lastEngagedAt: ["bookmark", "like", "share", "comment", "ai_action"].includes(event.type)
-          ? occurredAt
-          : undefined,
-        score: { increment: scoreDelta },
-      },
-    })
-  }
+        update: {
+          impressionCount: event.type === "impression" ? { increment: 1 } : undefined,
+          clickCount: event.type === "click" ? { increment: 1 } : undefined,
+          readCount: event.type === "read" ? { increment: 1 } : undefined,
+          dwellMs: event.type === "dwell" ? { increment: event.durationMs ?? 0 } : undefined,
+          maxScrollDepth: event.scrollDepth,
+          bookmarked: event.type === "bookmark" ? true : event.type === "unbookmark" ? false : undefined,
+          liked: event.type === "like" ? true : event.type === "dislike" ? false : undefined,
+          disliked: event.type === "dislike" ? true : event.type === "like" ? false : undefined,
+          hidden: event.type === "hide" ? true : undefined,
+          sharedCount: event.type === "share" ? { increment: 1 } : undefined,
+          commentCount: event.type === "comment" ? { increment: 1 } : undefined,
+          aiActionCount: event.type === "ai_action" ? { increment: 1 } : undefined,
+          lastSeenAt: ["impression", "dwell"].includes(event.type) ? occurredAt : undefined,
+          lastClickedAt: ["click", "read"].includes(event.type) ? occurredAt : undefined,
+          lastEngagedAt: ["bookmark", "like", "share", "comment", "ai_action"].includes(event.type)
+            ? occurredAt
+            : undefined,
+          score: { increment: scoreDelta },
+        },
+      })
+    }
 
-  await prisma.userInterestProfile.upsert({
-    where: { userId },
-    create: {
-      userId,
-      topicWeights,
-      sourceWeights,
-      tagWeights,
-      lastEventAt,
-    },
-    update: {
-      topicWeights,
-      sourceWeights,
-      tagWeights,
-      lastEventAt,
-    },
+    if (existingProfile) {
+      await tx.userInterestProfile.update({
+        where: { userId },
+        data: {
+          topicWeights,
+          sourceWeights,
+          tagWeights,
+          lastEventAt,
+        },
+      })
+    } else {
+      await tx.userInterestProfile.create({
+        data: {
+          userId,
+          topicWeights,
+          sourceWeights,
+          tagWeights,
+          lastEventAt,
+        },
+      })
+    }
   })
 }
 
