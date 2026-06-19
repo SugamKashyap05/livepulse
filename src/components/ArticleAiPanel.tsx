@@ -2,6 +2,7 @@
 
 import type { CSSProperties, FormEvent, ReactNode } from "react"
 import { useEffect, useRef, useState } from "react"
+import { trackContextEvent } from "@/lib/contextTelemetry"
 
 type ChatMessage = {
   role: "user" | "assistant"
@@ -128,6 +129,18 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
     SENTIMENT_CONFIG[sentiment as keyof typeof SENTIMENT_CONFIG]
   const summaryLines = summary ? splitSummary(summary) : []
 
+  function trackAiAction(action: string) {
+    trackContextEvent({
+      articleId: article.id,
+      type: "ai_action",
+      surface: "article-ai-panel",
+      context: {
+        action,
+        topic: article.topic,
+      },
+    })
+  }
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -156,7 +169,10 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
         setError("AI service is unavailable right now.")
         return
       }
-      if (data.summary) setSummary(data.summary)
+      if (data.summary) {
+        setSummary(data.summary)
+        trackAiAction(force ? "expand_summary" : "summarize")
+      }
     } catch {
       setError("AI service is unavailable right now.")
     } finally {
@@ -184,7 +200,10 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
         setError("AI service is unavailable right now.")
         return
       }
-      if (data.sentiment) setSentiment(data.sentiment)
+      if (data.sentiment) {
+        setSentiment(data.sentiment)
+        trackAiAction("sentiment")
+      }
     } catch {
       setError("AI service is unavailable right now.")
     } finally {
@@ -213,7 +232,10 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
         setError("AI service is unavailable right now.")
         return
       }
-      if (Array.isArray(data.tags)) setTags(data.tags.map(String))
+      if (Array.isArray(data.tags)) {
+        setTags(data.tags.map(String))
+        trackAiAction("tags")
+      }
     } catch {
       setError("AI service is unavailable right now.")
     } finally {
@@ -231,6 +253,7 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
     ]
 
     setMessages(nextMessages)
+    trackAiAction("article_chat")
     setChatInput("")
     setIsTyping(true)
     setIsThinking(true)

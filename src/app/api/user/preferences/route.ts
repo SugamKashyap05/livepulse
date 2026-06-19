@@ -44,6 +44,7 @@ export async function GET() {
     country: profile?.country ?? null,
     topics: follows.map((follow) => follow.topicSlug),
     onboarded: profile?.onboarded ?? false,
+    personalizationEnabled: profile?.personalizationEnabled ?? true,
     user: {
       id: user.id,
       name: user.name ?? null,
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
       userId: user.id,
       region: region ?? null,
       country: country ?? null,
+      personalizationEnabled: true,
       onboarded: true,
     },
     update: {

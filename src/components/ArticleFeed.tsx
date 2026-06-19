@@ -85,7 +85,17 @@ export default function ArticleFeed({
 
   return (
     <>
-      <NewsGrid articles={articles} />
+      <NewsGrid
+        articles={articles}
+        feedContext={{
+          scope,
+          topic,
+          sentiment,
+          q,
+          tag,
+          surface: "feed",
+        }}
+      />
 
       {showRegwall && (
         <Regwall onClose={() => setShowRegwall(false)} />

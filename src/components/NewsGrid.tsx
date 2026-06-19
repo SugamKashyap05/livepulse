@@ -1,12 +1,22 @@
 import NewsCard from "@/components/NewsCard"
 import type { NewsItem } from "@/types/news"
 
+export type NewsGridFeedContext = {
+  scope: string
+  topic?: string | null
+  sentiment?: string | null
+  q?: string | null
+  tag?: string | null
+  surface?: string
+}
+
 type NewsGridProps = {
   articles: NewsItem[]
   loading?: boolean
+  feedContext?: NewsGridFeedContext
 }
 
-export default function NewsGrid({ articles, loading = false }: NewsGridProps) {
+export default function NewsGrid({ articles, loading = false, feedContext }: NewsGridProps) {
   if (loading) {
     return (
       <div className="article-grid" style={gridStyle}>
@@ -48,8 +58,13 @@ export default function NewsGrid({ articles, loading = false }: NewsGridProps) {
 
   return (
     <div className="article-grid" style={gridStyle}>
-      {articles.map((item) => (
-        <NewsCard key={item.id} item={item} />
+      {articles.map((item, index) => (
+        <NewsCard
+          key={item.id}
+          item={item}
+          feedContext={feedContext}
+          feedPosition={index}
+        />
       ))}
     </div>
   )

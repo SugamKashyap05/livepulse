@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
+import ArticleDwellTracker from "@/components/ArticleDwellTracker"
 import ArticleAiPanel from "@/components/ArticleAiPanel"
 import Header from "@/components/Header"
 import NewsCard from "@/components/NewsCard"
@@ -41,6 +42,12 @@ export default async function AiReportPage({ params }: AiReportPageProps) {
   return (
     <>
       <Header />
+      <ArticleDwellTracker
+        articleId={article.id}
+        topic={article.topic}
+        source={article.source}
+        surface="ai-report"
+      />
       <main
         className="article-detail-shell"
         style={{ maxWidth: 920, margin: "0 auto", padding: "40px 24px 80px" }}
@@ -188,7 +195,7 @@ export default async function AiReportPage({ params }: AiReportPageProps) {
               gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
               gap: 16,
             }}>
-              {related.map(({ article: item, reason }) => (
+              {related.map(({ article: item, reason }, index) => (
                 <div key={item.id} style={{ display: "grid", gap: 8 }}>
                   <div style={{
                     fontFamily: "'IBM Plex Mono', monospace",
@@ -200,6 +207,8 @@ export default async function AiReportPage({ params }: AiReportPageProps) {
                     {reason}
                   </div>
                   <NewsCard
+                    feedContext={{ scope: "related", surface: "related-ai-report" }}
+                    feedPosition={index}
                     item={{
                       id: item.id,
                       title: item.title,

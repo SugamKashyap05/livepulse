@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client"
 import { formatDistanceToNow } from "date-fns"
 import { getArticleLink } from "@/lib/articleLinks"
+import { rankArticlesForUser } from "@/lib/contextEngine"
 import { prisma } from "@/lib/db"
 import type { NewsItem } from "@/types/news"
 
@@ -235,7 +236,8 @@ async function getArticleFeedPage(options: FeedPageOptions): Promise<FeedPage> {
 
   const pageRows = rows.slice(0, limit)
   const hasMore = rows.length > limit
-  const marked = await markUserState(pageRows, options.userId)
+  const ranked = await rankArticlesForUser(pageRows, options.userId)
+  const marked = await markUserState(ranked, options.userId)
 
   return {
     articles: marked.map(formatArticle),

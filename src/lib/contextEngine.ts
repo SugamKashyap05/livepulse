@@ -1,0 +1,341 @@
+import type { Prisma } from "@prisma/client"
+import { prisma } from "@/lib/db"
+
+export const CONTEXT_EVENT_TYPES = [
+  "impression",
+  "click",
+  "read",
+  "dwell",
+  "bookmark",
+  "unbookmark",
+  "like",
+  "dislike",
+  "hide",
+  "share",
+  "comment",
+  "ai_action",
+] as const
+
+export type ContextEventType = (typeof CONTEXT_EVENT_TYPES)[number]
+
+export type ContextEventInput = {
+  articleId: string
+  type: ContextEventType
+  value?: number
+  durationMs?: number
+  visibleMs?: number
+  scrollDepth?: number
+  feedScope?: string
+  feedPosition?: number
+  surface?: string
+  source?: string
+  sessionId?: string
+  pageViewId?: string
+  context?: Prisma.InputJsonValue
+  occurredAt?: Date
+}
+
+type WeightedMap = Record<string, number>
+
+const EVENT_SCORE: Record<ContextEventType, number> = {
+  impression: 0.12,
+  click: 2,
+  read: 2.5,
+  dwell: 0,
+  bookmark: 8,
+  unbookmark: -4,
+  like: 6,
+  dislike: -7,
+  hide: -10,
+  share: 5,
+  comment: 6,
+  ai_action: 1,
+}
+
+export function isContextEventType(value: unknown): value is ContextEventType {
+  return typeof value === "string" && CONTEXT_EVENT_TYPES.includes(value as ContextEventType)
+}
+
+export function scoreContextEvent(event: Pick<ContextEventInput, "type" | "durationMs" | "scrollDepth">) {
+  const base = EVENT_SCORE[event.type]
+  if (event.type !== "dwell") return base
+
+  const durationScore = Math.min(Math.max(event.durationMs ?? 0, 0) / 30000, 4)
+  const depthScore = Math.min(Math.max(event.scrollDepth ?? 0, 0), 1.2)
+  return durationScore + depthScore
+}
+
+function clampNumber(value: unknown, min: number, max: number) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(Math.max(value, min), max)
+    : undefined
+}
+
+export function normalizeContextEvent(input: unknown): ContextEventInput | null {
+  if (!input || typeof input !== "object") return null
+  const payload = input as Record<string, unknown>
+  const articleId = typeof payload.articleId === "string" ? payload.articleId : null
+  const type = payload.type
+  if (!articleId || !isContextEventType(type)) return null
+
+  const occurredAt =
+    typeof payload.occurredAt === "string"
+      ? new Date(payload.occurredAt)
+      : undefined
+
+  return {
+    articleId,
+    type,
+    value: clampNumber(payload.value, -1000, 1000),
+    durationMs: clampNumber(payload.durationMs, 0, 24 * 60 * 60 * 1000),
+    visibleMs: clampNumber(payload.visibleMs, 0, 24 * 60 * 60 * 1000),
+    scrollDepth: clampNumber(payload.scrollDepth, 0, 1),
+    feedScope: typeof payload.feedScope === "string" ? payload.feedScope.slice(0, 80) : undefined,
+    feedPosition: clampNumber(payload.feedPosition, 0, 10000),
+    surface: typeof payload.surface === "string" ? payload.surface.slice(0, 80) : undefined,
+    source: typeof payload.source === "string" ? payload.source.slice(0, 80) : undefined,
+    sessionId: typeof payload.sessionId === "string" ? payload.sessionId.slice(0, 120) : undefined,
+    pageViewId: typeof payload.pageViewId === "string" ? payload.pageViewId.slice(0, 120) : undefined,
+    context: isJsonObject(payload.context) ? payload.context : undefined,
+    occurredAt: occurredAt && !Number.isNaN(occurredAt.getTime()) ? occurredAt : undefined,
+  }
+}
+
+function isJsonObject(value: unknown): value is Prisma.InputJsonObject {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function parseWeights(value: Prisma.JsonValue | null | undefined): WeightedMap {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const weights: WeightedMap = {}
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw === "number" && Number.isFinite(raw)) weights[key] = raw
+  }
+  return weights
+}
+
+function addWeight(map: WeightedMap, key: string | null | undefined, amount: number) {
+  const normalized = key?.trim().toLowerCase()
+  if (!normalized) return
+  map[normalized] = Number(((map[normalized] ?? 0) + amount).toFixed(3))
+}
+
+function parseTags(aiTags: string | null | undefined) {
+  try {
+    const parsed = aiTags ? JSON.parse(aiTags) : []
+    return Array.isArray(parsed) ? parsed.map(String).slice(0, 8) : []
+  } catch {
+    return []
+  }
+}
+
+export async function recordContextEvents({
+  userId,
+  anonymousId,
+  events,
+}: {
+  userId?: string | null
+  anonymousId?: string | null
+  events: ContextEventInput[]
+}) {
+  const cleanEvents = events.slice(0, 40)
+  if (cleanEvents.length === 0) return { accepted: 0 }
+
+  const articleIds = Array.from(new Set(cleanEvents.map((event) => event.articleId)))
+  const articles = await prisma.newsArticle.findMany({
+    where: { id: { in: articleIds }, published: true },
+    select: {
+      id: true,
+      topic: true,
+      source: true,
+      aiTags: true,
+    },
+  })
+  const articleMap = new Map(articles.map((article) => [article.id, article]))
+  const validEvents = cleanEvents.filter((event) => articleMap.has(event.articleId))
+
+  if (validEvents.length === 0) return { accepted: 0 }
+
+  await prisma.userArticleEvent.createMany({
+    data: validEvents.map((event) => ({
+      userId: userId ?? null,
+      anonymousId: anonymousId ?? null,
+      articleId: event.articleId,
+      type: event.type,
+      value: event.value,
+      durationMs: event.durationMs,
+      visibleMs: event.visibleMs,
+      scrollDepth: event.scrollDepth,
+      feedScope: event.feedScope,
+      feedPosition: event.feedPosition,
+      surface: event.surface,
+      source: event.source,
+      sessionId: event.sessionId,
+      pageViewId: event.pageViewId,
+      context: event.context,
+      occurredAt: event.occurredAt ?? new Date(),
+    })),
+  })
+
+  if (userId) {
+    await updateUserContext({ userId, events: validEvents, articleMap })
+  }
+
+  return { accepted: validEvents.length }
+}
+
+async function updateUserContext({
+  userId,
+  events,
+  articleMap,
+}: {
+  userId: string
+  events: ContextEventInput[]
+  articleMap: Map<string, { id: string; topic: string; source: string; aiTags: string | null }>
+}) {
+  const existingProfile = await prisma.userInterestProfile.findUnique({
+    where: { userId },
+  })
+  const topicWeights = parseWeights(existingProfile?.topicWeights)
+  const sourceWeights = parseWeights(existingProfile?.sourceWeights)
+  const tagWeights = parseWeights(existingProfile?.tagWeights)
+  let lastEventAt = existingProfile?.lastEventAt ?? null
+
+  for (const event of events) {
+    const article = articleMap.get(event.articleId)
+    if (!article) continue
+
+    const scoreDelta = scoreContextEvent(event)
+    const occurredAt = event.occurredAt ?? new Date()
+    if (!lastEventAt || occurredAt > lastEventAt) lastEventAt = occurredAt
+
+    addWeight(topicWeights, article.topic, scoreDelta)
+    addWeight(sourceWeights, article.source, scoreDelta * 0.6)
+    for (const tag of parseTags(article.aiTags)) addWeight(tagWeights, tag, scoreDelta * 0.45)
+
+    await prisma.userArticleContext.upsert({
+      where: {
+        userId_articleId: {
+          userId,
+          articleId: event.articleId,
+        },
+      },
+      create: {
+        userId,
+        articleId: event.articleId,
+        impressionCount: event.type === "impression" ? 1 : 0,
+        clickCount: event.type === "click" ? 1 : 0,
+        readCount: event.type === "read" ? 1 : 0,
+        dwellMs: event.type === "dwell" ? event.durationMs ?? 0 : 0,
+        maxScrollDepth: event.scrollDepth,
+        bookmarked: event.type === "bookmark",
+        liked: event.type === "like",
+        disliked: event.type === "dislike",
+        hidden: event.type === "hide",
+        sharedCount: event.type === "share" ? 1 : 0,
+        commentCount: event.type === "comment" ? 1 : 0,
+        aiActionCount: event.type === "ai_action" ? 1 : 0,
+        lastSeenAt: ["impression", "dwell"].includes(event.type) ? occurredAt : null,
+        lastClickedAt: ["click", "read"].includes(event.type) ? occurredAt : null,
+        lastEngagedAt: ["bookmark", "like", "share", "comment", "ai_action"].includes(event.type)
+          ? occurredAt
+          : null,
+        score: scoreDelta,
+      },
+      update: {
+        impressionCount: event.type === "impression" ? { increment: 1 } : undefined,
+        clickCount: event.type === "click" ? { increment: 1 } : undefined,
+        readCount: event.type === "read" ? { increment: 1 } : undefined,
+        dwellMs: event.type === "dwell" ? { increment: event.durationMs ?? 0 } : undefined,
+        maxScrollDepth: event.scrollDepth,
+        bookmarked: event.type === "bookmark" ? true : event.type === "unbookmark" ? false : undefined,
+        liked: event.type === "like" ? true : event.type === "dislike" ? false : undefined,
+        disliked: event.type === "dislike" ? true : event.type === "like" ? false : undefined,
+        hidden: event.type === "hide" ? true : undefined,
+        sharedCount: event.type === "share" ? { increment: 1 } : undefined,
+        commentCount: event.type === "comment" ? { increment: 1 } : undefined,
+        aiActionCount: event.type === "ai_action" ? { increment: 1 } : undefined,
+        lastSeenAt: ["impression", "dwell"].includes(event.type) ? occurredAt : undefined,
+        lastClickedAt: ["click", "read"].includes(event.type) ? occurredAt : undefined,
+        lastEngagedAt: ["bookmark", "like", "share", "comment", "ai_action"].includes(event.type)
+          ? occurredAt
+          : undefined,
+        score: { increment: scoreDelta },
+      },
+    })
+  }
+
+  await prisma.userInterestProfile.upsert({
+    where: { userId },
+    create: {
+      userId,
+      topicWeights,
+      sourceWeights,
+      tagWeights,
+      lastEventAt,
+    },
+    update: {
+      topicWeights,
+      sourceWeights,
+      tagWeights,
+      lastEventAt,
+    },
+  })
+}
+
+export async function rankArticlesForUser<T extends { id: string; topic: string; source: string; pubDate: Date }>(
+  articles: T[],
+  userId?: string | null
+) {
+  if (!userId || articles.length < 2) return articles
+
+  const [contexts, interestProfile, userProfile] = await Promise.all([
+    prisma.userArticleContext.findMany({
+      where: {
+        userId,
+        articleId: { in: articles.map((article) => article.id) },
+      },
+    }),
+    prisma.userInterestProfile.findUnique({ where: { userId } }),
+    prisma.userProfile.findUnique({
+      where: { userId },
+      select: { personalizationEnabled: true },
+    }),
+  ])
+
+  if (userProfile?.personalizationEnabled === false) return articles
+
+  const contextMap = new Map(contexts.map((context) => [context.articleId, context]))
+  const topicWeights = parseWeights(interestProfile?.topicWeights)
+  const sourceWeights = parseWeights(interestProfile?.sourceWeights)
+
+  return [...articles].sort((a, b) => {
+    const aContext = contextMap.get(a.id)
+    const bContext = contextMap.get(b.id)
+    const aScore = feedScore(a, aContext, topicWeights, sourceWeights)
+    const bScore = feedScore(b, bContext, topicWeights, sourceWeights)
+    if (bScore !== aScore) return bScore - aScore
+    return b.pubDate.getTime() - a.pubDate.getTime()
+  })
+}
+
+function feedScore(
+  article: { topic: string; source: string; pubDate: Date },
+  context: Prisma.UserArticleContextGetPayload<object> | undefined,
+  topicWeights: WeightedMap,
+  sourceWeights: WeightedMap
+) {
+  const hoursOld = Math.max((Date.now() - article.pubDate.getTime()) / 3600000, 0)
+  const freshness = Math.max(0, 8 - hoursOld / 12)
+  const topic = topicWeights[article.topic.toLowerCase()] ?? 0
+  const source = sourceWeights[article.source.toLowerCase()] ?? 0
+  const behavior = context
+    ? context.score * 0.4
+      - context.readCount * 2
+      - (context.hidden ? 25 : 0)
+      - (context.disliked ? 10 : 0)
+      + (context.bookmarked ? 3 : 0)
+    : 0
+
+  return freshness + topic * 0.25 + source * 0.12 + behavior
+}

@@ -1,8 +1,10 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { NewsItem } from "@/types/news"
 import { getInternalArticleLink } from "@/lib/articleLinks"
+import { trackContextEvent } from "@/lib/contextTelemetry"
+import type { NewsGridFeedContext } from "@/components/NewsGrid"
 
 const TOPIC_COLORS: Record<string, string> = {
   World: "#6c8fff",
@@ -62,17 +64,30 @@ export interface NewsItemWithAI extends NewsItem {
   isBookmarked?: boolean
 }
 
-export default function NewsCard({ item }: { item: NewsItemWithAI }) {
+export default function NewsCard({
+  item,
+  feedContext,
+  feedPosition,
+}: {
+  item: NewsItemWithAI
+  feedContext?: NewsGridFeedContext
+  feedPosition?: number
+}) {
   const color = TOPIC_COLORS[item.topic] || "var(--muted)"
   const bg = TOPIC_BG[item.topic] || "var(--surface2)"
   const articleHref = getInternalArticleLink(item)
 
+  const articleRef = useRef<HTMLElement | null>(null)
+  const impressionSentRef = useRef(false)
+  const visibleSinceRef = useRef<number | null>(null)
   const [summary, setSummary] = useState<string | null>(item.summary || null)
   const [sentiment, setSentiment] = useState<string | null>(item.sentiment || null)
   const [loadingSummary, setLoadingSummary] = useState(false)
   const [loadingSentiment, setLoadingSentiment] = useState(false)
   const [loadingTags, setLoadingTags] = useState(false)
   const [bookmarked, setBookmarked] = useState<boolean>(item.isBookmarked ?? false)
+  const [feedback, setFeedback] = useState<"like" | "dislike" | null>(null)
+  const [hidden, setHidden] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
   const lastTouchActivationAt = useRef(0)
@@ -83,6 +98,59 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
       return []
     }
   })
+
+  useEffect(() => {
+    const node = articleRef.current
+    if (!node || impressionSentRef.current || typeof IntersectionObserver === "undefined") {
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+          visibleSinceRef.current = visibleSinceRef.current ?? Date.now()
+          window.setTimeout(() => {
+            if (impressionSentRef.current || visibleSinceRef.current === null) return
+            const visibleMs = Date.now() - visibleSinceRef.current
+            if (visibleMs < 800) return
+            impressionSentRef.current = true
+            trackCardEvent("impression", { visibleMs })
+            observer.disconnect()
+          }, 900)
+          return
+        }
+
+        visibleSinceRef.current = null
+      },
+      { threshold: [0, 0.5, 0.75] }
+    )
+
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [item.id])
+
+  function trackCardEvent(
+    type: Parameters<typeof trackContextEvent>[0]["type"],
+    extra: Partial<Parameters<typeof trackContextEvent>[0]> = {}
+  ) {
+    trackContextEvent({
+      articleId: item.id,
+      type,
+      feedScope: feedContext?.scope,
+      feedPosition,
+      surface: feedContext?.surface ?? "card",
+      source: item.source,
+      context: {
+        topic: item.topic,
+        sentiment: feedContext?.sentiment ?? null,
+        search: feedContext?.q ?? null,
+        tag: feedContext?.tag ?? null,
+        topicFilter: feedContext?.topic ?? null,
+      },
+      ...extra,
+    })
+  }
 
   function shouldIgnoreFollowUpClick(
     e:
@@ -133,6 +201,7 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
       if (data.summary) {
         setSummary(data.summary)
         setShowSummary(true)
+        trackCardEvent("ai_action", { context: { action: "summarize", topic: item.topic } })
       }
     } catch {
       setAiError("AI service is unavailable right now.")
@@ -170,7 +239,10 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
         setAiError("AI service is unavailable right now.")
         return
       }
-      if (data.sentiment) setSentiment(data.sentiment)
+      if (data.sentiment) {
+        setSentiment(data.sentiment)
+        trackCardEvent("ai_action", { context: { action: "sentiment", topic: item.topic } })
+      }
     } catch {
       setAiError("AI service is unavailable right now.")
     } finally {
@@ -210,6 +282,7 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
       }
       if (Array.isArray(data.tags)) {
         setAiTags(data.tags)
+        trackCardEvent("ai_action", { context: { action: "tag", topic: item.topic } })
       }
     } catch {
       setAiError("AI service is unavailable right now.")
@@ -237,7 +310,9 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
       })
 
       if (response.ok) {
-        setBookmarked((value) => !value)
+        const nextBookmarked = !bookmarked
+        setBookmarked(nextBookmarked)
+        trackCardEvent(nextBookmarked ? "bookmark" : "unbookmark")
         setAiError(null)
         return
       }
@@ -254,11 +329,67 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
   }
 
   function handleArticleOpen() {
+    trackCardEvent("click")
     fetch("/api/user/read", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ articleId: item.id }),
     }).catch(() => {})
+    trackCardEvent("read")
+  }
+
+  function handlePreference(
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.PointerEvent<HTMLButtonElement>
+      | React.TouchEvent<HTMLButtonElement>,
+    preference: "like" | "dislike"
+  ) {
+    e.stopPropagation()
+    e.preventDefault()
+    if (shouldIgnoreFollowUpClick(e)) return
+
+    const nextPreference = feedback === preference ? null : preference
+    setFeedback(nextPreference)
+    if (nextPreference) trackCardEvent(nextPreference)
+  }
+
+  function handleHide(
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.PointerEvent<HTMLButtonElement>
+      | React.TouchEvent<HTMLButtonElement>
+  ) {
+    e.stopPropagation()
+    e.preventDefault()
+    if (shouldIgnoreFollowUpClick(e)) return
+
+    setHidden(true)
+    trackCardEvent("hide")
+  }
+
+  async function handleShare(
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.PointerEvent<HTMLButtonElement>
+      | React.TouchEvent<HTMLButtonElement>
+  ) {
+    e.stopPropagation()
+    e.preventDefault()
+    if (shouldIgnoreFollowUpClick(e)) return
+
+    trackCardEvent("share")
+    const url = new URL(articleHref, window.location.origin).toString()
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: item.title, url })
+        return
+      }
+      await navigator.clipboard?.writeText(url)
+      setAiError("Link copied.")
+    } catch {
+      setAiError("Could not share this article.")
+    }
   }
 
   function handleTouchAction<T extends HTMLButtonElement>(
@@ -272,8 +403,11 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
   const sentimentCfg =
     SENTIMENT_CONFIG[sentiment as keyof typeof SENTIMENT_CONFIG]
 
+  if (hidden) return null
+
   return (
     <article
+      ref={articleRef}
       className="news-card"
       style={{
         background: "linear-gradient(180deg, #161620 0%, #121218 100%)",
@@ -736,6 +870,92 @@ export default function NewsCard({ item }: { item: NewsItemWithAI }) {
           {loadingSummary ? "..." : summary ? (showSummary ? "hide" : "summary") : "AI"}
         </button>
       </div>
+
+      <div style={{
+        borderTop: "1px solid var(--border)",
+        padding: "8px 18px 12px",
+        display: "grid",
+        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+        gap: 6,
+      }}>
+        <FeedbackButton
+          label="More"
+          active={feedback === "like"}
+          title="Show more like this"
+          onClick={(event) => handlePreference(event, "like")}
+          onPointerUp={(event) => handleTouchAction(event, (touchEvent) => handlePreference(touchEvent, "like"))}
+          onTouchEnd={(event) => handleTouchAction(event, (touchEvent) => handlePreference(touchEvent, "like"))}
+        />
+        <FeedbackButton
+          label="Less"
+          active={feedback === "dislike"}
+          title="Show less like this"
+          onClick={(event) => handlePreference(event, "dislike")}
+          onPointerUp={(event) => handleTouchAction(event, (touchEvent) => handlePreference(touchEvent, "dislike"))}
+          onTouchEnd={(event) => handleTouchAction(event, (touchEvent) => handlePreference(touchEvent, "dislike"))}
+        />
+        <FeedbackButton
+          label="Share"
+          title="Share"
+          onClick={handleShare}
+          onPointerUp={(event) => handleTouchAction(event, handleShare)}
+          onTouchEnd={(event) => handleTouchAction(event, handleShare)}
+        />
+        <FeedbackButton
+          label="Hide"
+          title="Hide article"
+          danger
+          onClick={handleHide}
+          onPointerUp={(event) => handleTouchAction(event, handleHide)}
+          onTouchEnd={(event) => handleTouchAction(event, handleHide)}
+        />
+      </div>
     </article>
+  )
+}
+
+function FeedbackButton({
+  label,
+  active = false,
+  danger = false,
+  title,
+  onClick,
+  onPointerUp,
+  onTouchEnd,
+}: {
+  label: string
+  active?: boolean
+  danger?: boolean
+  title: string
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>
+  onPointerUp: (event: React.PointerEvent<HTMLButtonElement>) => void | Promise<void>
+  onTouchEnd: (event: React.TouchEvent<HTMLButtonElement>) => void | Promise<void>
+}) {
+  return (
+    <button
+      className="card-action-btn"
+      type="button"
+      title={title}
+      onClick={onClick}
+      onPointerUp={onPointerUp}
+      onTouchEnd={onTouchEnd}
+      style={{
+        minHeight: 36,
+        padding: "6px 8px",
+        background: active ? "var(--accent-dim)" : "transparent",
+        color: active ? "var(--accent)" : danger ? "var(--negative)" : "var(--muted)",
+        border: `1px solid ${active ? "var(--border-accent)" : "var(--border)"}`,
+        borderRadius: 2,
+        cursor: "pointer",
+        fontFamily: "var(--font-mono)",
+        fontSize: 9,
+        letterSpacing: "0.6px",
+        textTransform: "uppercase",
+        touchAction: "manipulation",
+        WebkitTapHighlightColor: "transparent",
+      }}
+    >
+      {label}
+    </button>
   )
 }

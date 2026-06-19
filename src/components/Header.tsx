@@ -157,6 +157,9 @@ export default function Header() {
           <Link href="/search" style={navLinkStyle}>
             Search
           </Link>
+          <Link href="/settings" style={navLinkStyle}>
+            Settings
+          </Link>
         </div>
       </div>
     </header>

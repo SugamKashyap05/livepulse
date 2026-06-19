@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       },
     },
     create: { userId, articleId },
-    update: {},
+    update: { readAt: new Date() },
   })
 
   return NextResponse.json({ success: true })

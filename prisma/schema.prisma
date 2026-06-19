@@ -37,6 +37,8 @@ model NewsArticle {
   scored       Boolean           @default(false) // Used for batch processing tracking
   bookmarks    UserBookmark[]
   reads        UserArticleRead[]
+  events       UserArticleEvent[]
+  contexts     UserArticleContext[]
   embeddings   ArticleEmbedding[]
   provenance   ArticleProvenance[]
 
@@ -388,6 +390,7 @@ model UserProfile {
   region    String?
   city      String?
   onboarded Boolean  @default(false)
+  personalizationEnabled Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -422,6 +425,79 @@ model UserArticleRead {
 
   @@unique([userId, articleId])
   @@index([userId, readAt(sort: Desc)])
+}
+
+model UserArticleEvent {
+  id          String   @id @default(cuid())
+  userId      String?
+  anonymousId String?
+  articleId   String
+  type        String
+  value       Float?
+  durationMs  Int?
+  visibleMs   Int?
+  scrollDepth Float?
+  feedScope   String?
+  feedPosition Int?
+  surface     String?
+  source      String?
+  sessionId   String?
+  pageViewId  String?
+  context     Json?
+  occurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  article NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt])
+  @@index([anonymousId, occurredAt])
+  @@index([articleId, type, occurredAt])
+  @@index([type, occurredAt])
+  @@index([sessionId])
+  @@index([feedScope, occurredAt])
+  @@index([createdAt])
+}
+
+model UserArticleContext {
+  id              String   @id @default(cuid())
+  userId          String
+  articleId       String
+  impressionCount Int      @default(0)
+  clickCount      Int      @default(0)
+  readCount       Int      @default(0)
+  dwellMs         Int      @default(0)
+  maxScrollDepth  Float?
+  bookmarked      Boolean  @default(false)
+  liked           Boolean  @default(false)
+  disliked        Boolean  @default(false)
+  hidden          Boolean  @default(false)
+  sharedCount     Int      @default(0)
+  commentCount    Int      @default(0)
+  aiActionCount   Int      @default(0)
+  lastSeenAt      DateTime?
+  lastClickedAt   DateTime?
+  lastEngagedAt   DateTime?
+  score           Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  article NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+  @@index([userId, score])
+  @@index([userId, updatedAt])
+  @@index([articleId])
+}
+
+model UserInterestProfile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  topicWeights Json?
+  sourceWeights Json?
+  tagWeights   Json?
+  lastEventAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model FeedSource {

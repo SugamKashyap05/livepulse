@@ -1,6 +1,7 @@
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
 import { notFound } from "next/navigation"
+import ArticleDwellTracker from "@/components/ArticleDwellTracker"
 import ArticleAiPanel from "@/components/ArticleAiPanel"
 import Header from "@/components/Header"
 import NewsCard from "@/components/NewsCard"
@@ -36,6 +37,12 @@ export default async function ArticleDetailPage({
   return (
     <>
       <Header />
+      <ArticleDwellTracker
+        articleId={article.id}
+        topic={article.topic}
+        source={article.source}
+        surface="article"
+      />
       <main style={{ minHeight: "100dvh" }}>
         <div className="article-detail-shell" style={{
           maxWidth: 720,
@@ -276,7 +283,7 @@ export default async function ArticleDetailPage({
                 gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
                 gap: 16,
               }}>
-                {related.map(({ article: item, reason }) => (
+                {related.map(({ article: item, reason }, index) => (
                   <div key={item.id} style={{ display: "grid", gap: 8 }}>
                     <div style={{
                       fontFamily: "var(--font-mono)",
@@ -288,6 +295,8 @@ export default async function ArticleDetailPage({
                       {reason}
                     </div>
                     <NewsCard
+                      feedContext={{ scope: "related", surface: "related-article" }}
+                      feedPosition={index}
                       item={{
                         id: item.id,
                         title: item.title,

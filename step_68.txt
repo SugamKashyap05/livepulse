@@ -1,0 +1,96 @@
+<USER_REQUEST>
+OPERATION: PIPELINE IGNITION
+Source: CI/CD Verified Audit Report (2026-06-12)
+One blocker confirmed. Execute all steps in order.
+Do not skip. Do not reorder. Report result of each step.
+
+════════════════════════════════════════════════════════
+STEP 1 — FIX BRANCH NAME (the only blocker)
+════════════════════════════════════════════════════════
+
+The workflow listens for `main`. GitHub has `master`.
+Pipeline has never triggered because of this mismatch.
+
+Run exactly:
+  git branch -m master main
+  git push origin main
+  git push origin --delete master
+
+Then go to:
+  https://github.com/SugamKashyap05/livepulse/settings
+  → Default branch → Change to `main` → Update
+
+Verify:
+  GitHub MCP → list branches → must show `main` only
+  `master` must not exist
+
+════════════════════════════════════════════════════════
+STEP 2 — CREATE develop BRANCH
+════════════════════════════════════════════════════════
+
+  git checkout -b develop
+  git push origin develop
+
+Verify:
+  GitHub MCP → list branches → shows `main` and `develop`
+
+════════════════════════════════════════════════════════
+STEP 3 — VERIFY ALL GITHUB SECRETS ARE SET
+════════════════════════════════════════════════════════
+
+Check https://github.com/SugamKashyap05/livepulse/settings/secrets/actions
+
+Confirm these 10 SECRETS exist (values hidden is fine):
+  DATABASE_URL
+  ADMIN_SECR
+<truncated 5473 bytes>
+═════════════════════════════════════════
+
+Using Neon MCP or Neon Console:
+  Project: polished-cloud-37103739
+  Branch: br-curly-meadow-aoa3za3u (production)
+
+Enable branch protection:
+  → Cannot be deleted
+  → Cannot be reset
+
+This prevents the CI pipeline from accidentally
+deleting or resetting the production database branch.
+
+Report: protection enabled YES/NO
+
+════════════════════════════════════════════════════════
+FINAL REPORT FORMAT
+════════════════════════════════════════════════════════
+
+After all steps, report:
+
+  Step 1 — Branch renamed:           DONE / BLOCKED (reason)
+  Step 2 — develop branch created:   DONE / BLOCKED
+  Step 3 — All secrets present:      DONE / MISSING: [names]
+  Step 4 — Pipeline triggered:       DONE / FAILED at stage N: error
+  Step 5 — Branch protection:        DONE / BLOCKED
+  Step 6 — README badge:             DONE / BLOCKED
+  Step 7 — SHA pinning:              DONE / PARTIAL (list unpinned)
+  Step 8 — PR preview comment:       DONE / BLOCKED
+  Step 9 — Neon branch protected:    DONE / BLOCKED
+
+  Pipeline first run result:
+    Stage 1 Quality Gate:   PASS / FAIL
+    Stage 2 Security Gate:  PASS / FAIL
+    Stage 3 Build + DB:     PASS / FAIL
+    Stage 4 Deploy:         PASS / FAIL
+    Stage 5 Health check:   PASS / FAIL
+
+  Overall: PIPELINE LIVE / STILL BLOCKED
+  If blocked: exact error, exact file, exact line.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-12T20:43:07+05:30.
+
+The user's current state is as follows:
+Active Document: e:\2026 final projects\news\livepulse\.env (LANGUAGE_UNSPECIFIED)
+Cursor is on line: 11
+Other open documents:
+- e:\2026 final projects\news\livepulse\.env (LANGUAGE_UNSPECIFIED)
+</ADDITIONAL_METADATA>
