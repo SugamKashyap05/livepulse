@@ -4,6 +4,7 @@ import RagAdminPanel from "@/components/admin/RagAdminPanel"
 import { MODELS } from "@/lib/ollama"
 import { getRagStatus } from "@/lib/rag"
 import { getDepartmentSummaries } from "@/lib/adminDepartments"
+import Link from "next/link"
 
 export const dynamic = "force-dynamic"
 
@@ -197,24 +198,38 @@ export default async function AiManagerPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 style={{
-          fontFamily: "'Playfair Display', serif",
-          fontSize: 28,
-          fontWeight: 700,
-          color: "var(--text)",
-          margin: 0,
-        }}>
-          AI Manager Office
-        </h1>
-        <p style={{
+      <div style={{ marginBottom: 32, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <h1 style={{
+            fontFamily: "'Playfair Display', serif",
+            fontSize: 28,
+            fontWeight: 700,
+            color: "var(--text)",
+            margin: 0,
+          }}>
+            AI Manager Office
+          </h1>
+          <p style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 11,
+            color: "var(--muted)",
+            marginTop: 6,
+          }}>
+            Private newsroom control plane for agents, departments, jobs, and publishing
+          </p>
+        </div>
+        <Link href="/admin/ai-manager/telemetry" style={{
+          padding: "8px 16px",
+          background: "var(--accent)",
+          color: "var(--background)",
+          textDecoration: "none",
+          borderRadius: "4px",
           fontFamily: "'IBM Plex Mono', monospace",
-          fontSize: 11,
-          color: "var(--muted)",
-          marginTop: 6,
+          fontSize: 12,
+          fontWeight: 600,
         }}>
-          Private newsroom control plane for agents, departments, jobs, and publishing
-        </p>
+          View Live Telemetry
+        </Link>
       </div>
 
       {/* AI Coverage stats */}

@@ -1,13 +1,16 @@
-import { getPaginatedFeed } from "./src/lib/paginatedFeed"
-import { prisma } from "./src/lib/db"
+import { fetchAllFeeds } from './src/lib/fetchFeeds';
 
-async function run() {
-  console.log("Testing feed generation...")
-  const res = await getPaginatedFeed({ limit: 10 })
-  console.log("Feed returned:", res.articles.length, "articles")
-  if (res.articles.length > 0) {
-    console.log("First article:", res.articles[0].title)
+async function test() {
+  console.log('Starting fetch...');
+  try {
+    const feeds = await fetchAllFeeds();
+    console.log(`Fetched ${feeds.length} articles`);
+    if (feeds.length > 0) {
+      console.log('Sample:', feeds[0]);
+    }
+  } catch (err) {
+    console.error('Error fetching feeds:', err);
   }
 }
 
-run().catch(console.error).finally(() => prisma.$disconnect())
+test();

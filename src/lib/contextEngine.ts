@@ -308,7 +308,7 @@ export async function rankArticlesForUser<T extends { id: string; topic: string;
     prisma.userInterestProfile.findUnique({ where: { userId } }),
     prisma.userProfile.findUnique({
       where: { userId },
-      select: { personalizationEnabled: true },
+      select: { personalizationEnabled: true } as any,
     }),
     sessionId ? prisma.userArticleEvent.findMany({
       where: {
@@ -319,7 +319,7 @@ export async function rankArticlesForUser<T extends { id: string; topic: string;
     }) : Promise.resolve([]),
   ])
 
-  if (userProfile?.personalizationEnabled === false) return articles
+  if ((userProfile as any)?.personalizationEnabled === false) return articles
 
   const contextMap = new Map(contexts.map((context) => [context.articleId, context]))
   const topicWeights = parseWeights(interestProfile?.topicWeights)

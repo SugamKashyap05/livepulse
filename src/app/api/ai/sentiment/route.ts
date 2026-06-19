@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { MODELS, logAiAction, structuredChat } from "@/lib/ollama"
+import { MODELS, logAiAction, structuredChat, isAiOverloaded } from "@/lib/ollama"
 
 export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
+    if (isAiOverloaded()) {
+      return NextResponse.json({ error: "AI service is currently busy processing other requests. Please try again later." }, { status: 429 })
+    }
+
     const body = await request.json()
     const id = body?.id
 
