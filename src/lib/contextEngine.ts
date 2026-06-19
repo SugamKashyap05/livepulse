@@ -290,7 +290,7 @@ export async function rankArticlesForUser<T extends { id: string; topic: string;
 ) {
   if (!userId || articles.length < 2) return articles
 
-  const [contexts, interestProfile, userProfile] = await Promise.all([
+  const [contexts, interestProfile, userProfile, sessionEvents] = await Promise.all([
     prisma.userArticleContext.findMany({
       where: {
         userId,
