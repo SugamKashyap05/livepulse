@@ -110,10 +110,10 @@ export default function TelemetryClient() {
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontFamily: "var(--font-mono)" }}>
         <div style={{
           width: 8, height: 8, borderRadius: "50%",
-          background: isConnected ? "var(--green, #22c55e)" : "var(--red, #ef4444)",
-          boxShadow: isConnected ? "0 0 8px var(--green, #22c55e)" : "none"
+          background: isConnected ? "var(--positive)" : "var(--negative)",
+          boxShadow: isConnected ? "0 0 8px var(--positive)" : "none"
         }} />
-        <span style={{ color: isConnected ? "var(--green, #22c55e)" : "var(--red, #ef4444)" }}>
+        <span style={{ color: isConnected ? "var(--positive)" : "var(--negative)" }}>
           {isConnected ? "LIVE STREAM ACTIVE" : "DISCONNECTED"}
         </span>
       </div>
@@ -140,7 +140,7 @@ export default function TelemetryClient() {
                 <div key={job.id} style={{ padding: 12, background: "rgba(0,0,0,0.2)", border: "1px solid var(--border)", borderRadius: 6 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
                     <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginRight: 8 }}>{job.title}</span>
-                    <span style={{ padding: "2px 6px", borderRadius: 9999, fontSize: 10, fontFamily: "var(--font-mono)", textTransform: "uppercase", background: "rgba(59, 130, 246, 0.1)", color: "#60a5fa" }}>
+                    <span style={{ padding: "2px 6px", borderRadius: 9999, fontSize: 10, fontFamily: "var(--font-mono)", textTransform: "uppercase", background: "var(--accent-dim)", color: "var(--accent)" }}>
                       {job.status}
                     </span>
                   </div>
@@ -163,7 +163,7 @@ export default function TelemetryClient() {
           display: "flex", flexDirection: "column", height: 600
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, color: "var(--text)" }}>
-            <Activity size={20} color="#a855f7" />
+            <Activity size={20} color="var(--accent)" />
             <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, margin: 0 }}>Agent Thought Stream</h2>
           </div>
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, paddingRight: 8 }}>
@@ -171,9 +171,9 @@ export default function TelemetryClient() {
               <p style={{ fontSize: 14, color: "var(--muted)", fontFamily: "var(--font-mono)", margin: 0 }}>No recent activity.</p>
             ) : (
               activities.map((activity) => (
-                <div key={activity.id} style={{ padding: 12, background: "rgba(0,0,0,0.2)", border: "1px solid var(--border)", borderLeft: "3px solid #a855f7", borderRadius: 6 }}>
+                <div key={activity.id} style={{ padding: 12, background: "rgba(0,0,0,0.2)", border: "1px solid var(--border)", borderLeft: "3px solid var(--accent)", borderRadius: 6 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700, fontSize: 12, color: "#d8b4fe", fontFamily: "var(--font-mono)" }}>[{activity.agent}]</span>
+                    <span style={{ fontWeight: 700, fontSize: 12, color: "var(--text)", fontFamily: "var(--font-mono)" }}>[{activity.agent}]</span>
                     <span style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--font-mono)", display: "flex", alignItems: "center", gap: 4 }}>
                       <Clock size={12} />
                       {new Date(activity.createdAt).toLocaleTimeString()}
@@ -188,8 +188,8 @@ export default function TelemetryClient() {
                   <div style={{ marginTop: 8, textAlign: "right" }}>
                      <span style={{
                        fontSize: 10, fontFamily: "var(--font-mono)", textTransform: "uppercase", padding: "2px 6px", borderRadius: 4,
-                       background: activity.status === 'thinking' ? "rgba(234, 179, 8, 0.1)" : "rgba(34, 197, 94, 0.1)",
-                       color: activity.status === 'thinking' ? "#eab308" : "#22c55e"
+                       background: activity.status === 'thinking' ? "rgba(246, 201, 14, 0.1)" : "rgba(62, 207, 142, 0.1)",
+                       color: activity.status === 'thinking' ? "var(--gold)" : "var(--positive)"
                      }}>
                       {activity.status}
                      </span>
@@ -206,7 +206,7 @@ export default function TelemetryClient() {
           display: "flex", flexDirection: "column", height: 600
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, color: "var(--text)" }}>
-            <Terminal size={20} color="var(--green, #22c55e)" />
+            <Terminal size={20} color="var(--positive)" />
             <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, margin: 0 }}>LLM Invocations</h2>
           </div>
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, paddingRight: 8 }}>
@@ -218,9 +218,9 @@ export default function TelemetryClient() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center", gap: 4 }}>
                       {log.success ? (
-                        <CheckCircle2 size={12} color="var(--green, #22c55e)" />
+                        <CheckCircle2 size={12} color="var(--positive)" />
                       ) : (
-                        <AlertCircle size={12} color="var(--red, #ef4444)" />
+                        <AlertCircle size={12} color="var(--negative)" />
                       )}
                       {log.action}
                     </span>

@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
 import { notFound } from "next/navigation"

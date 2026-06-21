@@ -87,7 +87,7 @@ describe("contextEngine", () => {
       // Default mock implementations to return neutral/empty data
       vi.mocked(prisma.userArticleContext.findMany).mockResolvedValue([])
       vi.mocked(prisma.userInterestProfile.findUnique).mockResolvedValue(null)
-      vi.mocked(prisma.userProfile.findUnique).mockResolvedValue({ personalizationEnabled: true } as any)
+      vi.mocked(prisma.userProfile.findUnique).mockResolvedValue({ personalizationEnabled: true } as never)
       vi.mocked(prisma.userArticleEvent.findMany).mockResolvedValue([])
     })
 
@@ -98,7 +98,7 @@ describe("contextEngine", () => {
     })
 
     it("returns articles unranked if personalization is disabled", async () => {
-      vi.mocked(prisma.userProfile.findUnique).mockResolvedValue({ personalizationEnabled: false } as any)
+      vi.mocked(prisma.userProfile.findUnique).mockResolvedValue({ personalizationEnabled: false } as never)
       const articles = [
         { id: "1", topic: "tech", source: "cnn", pubDate: new Date() },
         { id: "2", topic: "sports", source: "bbc", pubDate: new Date() }
@@ -161,7 +161,7 @@ describe("contextEngine", () => {
       vi.mocked(prisma.userArticleEvent.findMany).mockResolvedValue([
         { type: "click", durationMs: null, scrollDepth: null, article: { topic: "tech" } },
         { type: "read", durationMs: 120000, scrollDepth: 1, article: { topic: "tech" } },
-      ] as any)
+      ] as never)
 
       const articles = [
         { id: "sports", topic: "sports", source: "espn", pubDate },

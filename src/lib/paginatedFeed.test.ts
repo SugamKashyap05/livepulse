@@ -52,7 +52,7 @@ describe("paginatedFeed", () => {
       }
     ]
     
-    vi.mocked(prisma.newsArticle.findMany).mockResolvedValueOnce(mockArticles as any[])
+    vi.mocked(prisma.newsArticle.findMany).mockResolvedValueOnce(mockArticles as never[])
     
     const result = await getPaginatedFeed({ scope: "topic", topicSlug: "politics" })
     

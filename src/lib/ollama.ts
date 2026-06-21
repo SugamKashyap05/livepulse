@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { prisma } from "@/lib/db"
 import crypto from "crypto"
 import { sanitizeAiText } from "@/lib/textSafety"
@@ -401,9 +402,17 @@ export async function structuredChat<T>(
     if (match && match[1]) {
       rawText = match[1].trim()
     } else {
-      const firstBrace = rawText.indexOf('{')
-      const lastBrace = rawText.lastIndexOf('}')
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
+      // Clean up truncated markdown blocks
+      rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+      const firstBrace = Math.min(
+        rawText.indexOf('{') !== -1 ? rawText.indexOf('{') : Infinity,
+        rawText.indexOf('[') !== -1 ? rawText.indexOf('[') : Infinity
+      )
+      const lastBrace = Math.max(
+        rawText.lastIndexOf('}'),
+        rawText.lastIndexOf(']')
+      )
+      if (firstBrace !== Infinity && lastBrace !== -1 && lastBrace >= firstBrace) {
         rawText = rawText.substring(firstBrace, lastBrace + 1)
       }
     }

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { POST } from "./route"
-import { NextResponse } from "next/server"
 
 // Mock the dependencies
 vi.mock("@/lib/auth", () => ({
@@ -79,7 +78,7 @@ describe("POST /api/context/events", () => {
 
   it("respects user personalization settings", async () => {
     vi.mocked(getMutableCurrentUserId).mockResolvedValueOnce("user-123")
-    vi.mocked(prisma.userProfile.findUnique).mockResolvedValueOnce({ personalizationEnabled: false } as any)
+    vi.mocked(prisma.userProfile.findUnique).mockResolvedValueOnce({ personalizationEnabled: false } as never)
 
     const req = new Request("http://localhost/api/context/events", {
       method: "POST",

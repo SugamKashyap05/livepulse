@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import { notFound } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
 import ArticleDwellTracker from "@/components/ArticleDwellTracker"

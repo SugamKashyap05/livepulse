@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client"
 
 import { useEffect, useRef, useState } from "react"
@@ -130,6 +131,7 @@ export default function NewsCard({
 
     observer.observe(node)
     return () => observer.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id])
 
   function trackCardEvent(

@@ -195,13 +195,19 @@ async function updateUserContext({
   articleMap: Map<string, { id: string; topic: string; source: string; aiTags: string | null }>
 }) {
   await prisma.$transaction(async (tx) => {
-    const existingProfiles = await tx.$queryRaw<any[]>`SELECT * FROM "UserInterestProfile" WHERE "userId" = ${userId} FOR UPDATE`
+    interface RawInterestProfile {
+      topicWeights?: Prisma.JsonValue;
+      sourceWeights?: Prisma.JsonValue;
+      tagWeights?: Prisma.JsonValue;
+      lastEventAt?: string | Date | null;
+    }
+    const existingProfiles = await tx.$queryRaw<RawInterestProfile[]>`SELECT * FROM "UserInterestProfile" WHERE "userId" = ${userId} FOR UPDATE`
     const existingProfile = existingProfiles[0]
 
     const topicWeights = parseWeights(existingProfile?.topicWeights)
     const sourceWeights = parseWeights(existingProfile?.sourceWeights)
     const tagWeights = parseWeights(existingProfile?.tagWeights)
-    let lastEventAt = existingProfile?.lastEventAt ? new Date(existingProfile.lastEventAt) : null
+    let lastEventAt = existingProfile?.lastEventAt ? new Date(existingProfile.lastEventAt as string | number | Date) : null
 
     for (const event of events) {
       const article = articleMap.get(event.articleId)
@@ -308,6 +314,7 @@ export async function rankArticlesForUser<T extends { id: string; topic: string;
     prisma.userInterestProfile.findUnique({ where: { userId } }),
     prisma.userProfile.findUnique({
       where: { userId },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       select: { personalizationEnabled: true } as any,
     }),
     sessionId ? prisma.userArticleEvent.findMany({
@@ -319,7 +326,7 @@ export async function rankArticlesForUser<T extends { id: string; topic: string;
     }) : Promise.resolve([]),
   ])
 
-  if ((userProfile as any)?.personalizationEnabled === false) return articles
+  if ((userProfile as Record<string, unknown>)?.personalizationEnabled === false) return articles
 
   const contextMap = new Map(contexts.map((context) => [context.articleId, context]))
   const topicWeights = parseWeights(interestProfile?.topicWeights)
@@ -348,7 +355,7 @@ export async function rankArticlesForUser<T extends { id: string; topic: string;
   const pickedTopics = new Map<string, number>()
   const pickedSources = new Map<string, number>()
 
-  let pool = [...scoredArticles]
+  const pool = [...scoredArticles]
   
   while (pool.length > 0) {
     // Re-calculate MMR scores dynamically

@@ -20,12 +20,15 @@ export default function ArticleDwellTracker({
   surface,
 }: ArticleDwellTrackerProps) {
   const pageViewIdRef = useRef(createPageViewId())
-  const startedAtRef = useRef(Date.now())
-  const lastFlushAtRef = useRef(Date.now())
+  const startedAtRef = useRef<number>(0)
+  const lastFlushAtRef = useRef<number>(0)
   const maxScrollDepthRef = useRef(0)
   const readSentRef = useRef(false)
 
   useEffect(() => {
+    startedAtRef.current = Date.now()
+    lastFlushAtRef.current = Date.now()
+
     trackContextEvent({
       articleId,
       type: "click",

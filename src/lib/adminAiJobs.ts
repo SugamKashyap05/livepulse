@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/db"
 import { runFactChecker, runScoutGeneration, runSpinDoctor } from "@/lib/agents"
