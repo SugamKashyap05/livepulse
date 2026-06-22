@@ -103,7 +103,7 @@ async function runSync() {
         saved++
       } catch (error) {
         console.error(
-          `[LivePulse AutoSync] Error saving article: ${article.title}`,
+          "[LivePulse AutoSync] Error saving article:", article.title,
           error
         )
         skipped++
@@ -167,7 +167,7 @@ async function runSync() {
       embedText("warmup").catch(() => {})
     }
   } catch (error) {
-    console.error(`[LivePulse AutoSync] Sync #${syncCount} failed:`, error)
+    console.error("[LivePulse AutoSync] Sync #", syncCount, "failed:", error)
   } finally {
     isSyncing = false
   }

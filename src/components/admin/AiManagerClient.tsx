@@ -629,7 +629,7 @@ export default function AiManagerClient({
       addLocalNotice("info", `${action === "cancel" ? "Cancel" : "Retry"} request sent.`)
       await refreshJobs()
     } catch (error) {
-      console.error(`[manager job] ${action} failed:`, error)
+      console.error("[manager job]", action, "failed:", error)
       addLocalNotice("bad", `Could not ${action} that task. Check the admin logs and try again.`)
     } finally {
       setJobLoading(null)

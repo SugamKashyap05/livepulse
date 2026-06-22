@@ -129,7 +129,7 @@ export default function ResearchLibraryModule({
       setNotice({ tone: "good", text: `${labelForMode(mode)} queued successfully.` })
       await onRefresh?.()
     } catch (error) {
-      console.error(`[research library ${mode}]`, error)
+      console.error("[research library]", mode, error)
       setNotice({ tone: "bad", text: error instanceof Error ? error.message : `${labelForMode(mode)} failed.` })
     } finally {
       setWorking(null)

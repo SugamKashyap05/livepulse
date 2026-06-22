@@ -39,6 +39,6 @@ function postReindex(
     }
 
     const message = error instanceof Error ? error.message : String(error)
-    console.error(`[LivePulse RAG] Background reindex failed: ${message}`)
+    console.error("[LivePulse RAG] Background reindex failed:", message)
   })
 }

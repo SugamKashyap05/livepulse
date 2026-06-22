@@ -7,7 +7,7 @@ export async function POST(
   try {
     const resolvedParams = await params;
     const data = await request.json().catch(() => ({}));
-    console.log(`[Swarm Worker Heartbeat] Worker ID: ${resolvedParams.workerId}`, data);
+    console.log("[Swarm Worker Heartbeat] Worker ID:", resolvedParams.workerId, data);
     
     // Currently, we just accept the request to prevent 404 errors.
     

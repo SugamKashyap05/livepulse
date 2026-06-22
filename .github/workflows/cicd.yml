@@ -284,14 +284,18 @@ jobs:
         run: npm install --global vercel@latest
 
       - name: Pull Vercel project
-        run: vercel pull --yes --environment=${{ github.ref_name == 'main' && 'production' || 'preview' }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=$DEPLOY_ENV --token=$VERCEL_TOKEN
         env:
+          DEPLOY_ENV: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Build Vercel output
-        run: vercel build ${{ github.ref_name == 'main' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build $PROD_FLAG --token=$VERCEL_TOKEN
         env:
+          PROD_FLAG: ${{ github.ref_name == 'main' && '--prod' || '' }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 

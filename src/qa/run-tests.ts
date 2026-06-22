@@ -10,7 +10,7 @@ async function runTests() {
       console.log(`✅ PASS: ${message}`)
       passed++
     } else {
-      console.error(`❌ FAIL: ${message}`)
+      console.error("❌ FAIL:", message)
       failed++
     }
   }

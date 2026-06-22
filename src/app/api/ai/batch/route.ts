@@ -105,7 +105,7 @@ export async function POST(request: Request) {
 
         processedCount++
       } catch (err) {
-        console.error(`Failed to process article ${article.id}:`, err)
+        console.error("Failed to process article", article.id, ":", err)
         failedCount++
       }
     }

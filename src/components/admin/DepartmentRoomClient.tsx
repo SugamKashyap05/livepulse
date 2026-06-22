@@ -171,7 +171,7 @@ export default function DepartmentRoomClient({
               : "Room item sent to the Main Editor inbox.",
       })
     } catch (error) {
-      console.error(`[department room] ${action} failed:`, error)
+      console.error("[department room]", action, "failed:", error)
       setNotice({ tone: "bad", text: `Could not ${action} this room item.` })
     } finally {
       setLoading(null)

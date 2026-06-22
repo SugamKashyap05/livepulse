@@ -109,7 +109,7 @@ export async function GET(request: Request) {
         })
         saved++
       } catch (error) {
-        console.error(`[LivePulse] Error saving article: ${article.title}`, error)
+        console.error("[LivePulse] Error saving article:", article.title, error)
         skipped++
       }
     }

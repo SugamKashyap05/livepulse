@@ -105,7 +105,7 @@ export default function AssignmentDeskModule({
       setNotice({ tone: "good", text: `${labelForAction(action)} queued successfully.` })
       await onRefresh?.()
     } catch (error) {
-      console.error(`[assignment desk ${action}]`, error)
+      console.error("[assignment desk]", action, error)
       setNotice({ tone: "bad", text: error instanceof Error ? error.message : `${labelForAction(action)} failed.` })
     } finally {
       setWorking(null)

@@ -135,7 +135,7 @@ export default function DigestRoomModule({
       setNotice({ tone: "good", text: `${labelForAction(action)} queued successfully.` })
       await onRefresh?.()
     } catch (error) {
-      console.error(`[digest room ${action}]`, error)
+      console.error("[digest room]", action, error)
       setNotice({ tone: "bad", text: error instanceof Error ? error.message : `${labelForAction(action)} failed.` })
     } finally {
       setWorking(null)

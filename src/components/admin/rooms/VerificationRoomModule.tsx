@@ -120,7 +120,7 @@ export default function VerificationRoomModule({
       setNotice({ tone: "good", text: `${labelForAction(action)} queued successfully.` })
       await onRefresh?.()
     } catch (error) {
-      console.error(`[verification room ${action}]`, error)
+      console.error("[verification room]", action, error)
       setNotice({ tone: "bad", text: error instanceof Error ? error.message : `${labelForAction(action)} failed.` })
     } finally {
       setWorking(null)

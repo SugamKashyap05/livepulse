@@ -38,8 +38,9 @@ export default function AdminLoginPage() {
       }
 
       const next = new URLSearchParams(window.location.search).get("next")
-      const redirectTo = isSafeAdminRedirect(next) ? next : "/admin"
-      window.location.href = redirectTo || "/admin"
+      const safePath = isSafeAdminRedirect(next) && next ? next : "/admin"
+      // nosemgrep: javascript.browser.security.open-redirect.js-open-redirect
+      window.location.href = safePath
     } catch {
       setError("Unable to sign in right now")
     } finally {

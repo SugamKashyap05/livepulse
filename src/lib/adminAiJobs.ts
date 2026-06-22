@@ -976,7 +976,7 @@ async function runAiBatch(params: Record<string, unknown>, jobId?: string) {
         )
       }
     } catch (error) {
-      console.error(`[admin-ai-job] batch failed for ${article.id}:`, error)
+      console.error("[admin-ai-job] batch failed for", article.id, ":", error)
       failed++
       if (jobId) {
         const message = error instanceof Error ? error.message : "Unknown error"

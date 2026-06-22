@@ -94,7 +94,7 @@ export default function PublishingDeskModule({
       await onRefresh?.()
       setNotice(successNotice(action, report, publicUrl(report, publicBasePath)))
     } catch (error) {
-      console.error(`[publishing desk ${action}]`, error)
+      console.error("[publishing desk]", action, error)
       setNotice({ tone: "bad", text: `${labelForAction(action)} failed.` })
     } finally {
       setWorking(null)
