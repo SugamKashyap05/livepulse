@@ -78,9 +78,20 @@ type ManagerContext = {
 }
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434"
+const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY || ""
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "llama3"
 export const EMBEDDING_MODEL =
   process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text:latest"
+
+function getOllamaHeaders() {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  }
+  if (OLLAMA_API_KEY) {
+    headers["Authorization"] = `Bearer ${OLLAMA_API_KEY}`
+  }
+  return headers
+}
 export const EMBEDDING_DIM = 768
 const EMBEDDING_CACHE_TTL_MS = 5 * 60 * 1000
 const EMBEDDING_CACHE_MAX = 100
@@ -220,7 +231,7 @@ export async function ollamaChat(
   try {
     const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getOllamaHeaders(),
       signal: controller.signal,
       body: JSON.stringify({
         model,
@@ -263,7 +274,7 @@ export async function ollamaChatStream(
     const start = Date.now()
     const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getOllamaHeaders(),
       body: JSON.stringify({
         model,
         messages,
@@ -344,7 +355,7 @@ export async function chat(prompt: string, model: string = DEFAULT_MODEL) {
   try {
     const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getOllamaHeaders(),
       body: JSON.stringify({
         model,
         prompt,
@@ -382,7 +393,7 @@ export async function structuredChat<T>(
   try {
     const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getOllamaHeaders(),
       body: JSON.stringify({
         model,
         prompt: `${prompt}\n\nIMPORTANT: Return ONLY valid JSON. Do not include any explanations or markdown formatting outside the JSON block.`,
@@ -439,7 +450,7 @@ export async function embedText(text: string): Promise<number[]> {
   try {
     let response = await fetch(`${OLLAMA_HOST}/api/embeddings`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getOllamaHeaders(),
       body: JSON.stringify({
         model: EMBEDDING_MODEL,
         prompt: sanitized,
@@ -449,7 +460,7 @@ export async function embedText(text: string): Promise<number[]> {
     if (response.status === 404) {
       response = await fetch(`${OLLAMA_HOST}/api/embed`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getOllamaHeaders(),
         body: JSON.stringify({
           model: EMBEDDING_MODEL,
           input: sanitized,
