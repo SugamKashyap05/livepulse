@@ -112,9 +112,15 @@ jobs:
         run: npm ci
 
       - name: Semgrep SAST
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: p/default
+        run: |
+          pip install semgrep
+          semgrep scan \
+            --config "p/default" \
+            --error \
+            --no-git-ignore \
+            src/
+        env:
+          SEMGREP_APP_TOKEN: ""
 
       - name: OWASP dependency check
         uses: dependency-check/Dependency-Check_Action@main
