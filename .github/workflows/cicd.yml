@@ -132,6 +132,8 @@ jobs:
           args: >
             --enableRetired
             --failOnCVSS 8
+            --exclude "**/node_modules/**"
+            --exclude "**/.next/**"
 
       - name: Upload OWASP report
         if: always()
