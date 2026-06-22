@@ -410,10 +410,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
       - name: Smoke tests
         run: npm run ci:smoke
         env:
           LIVEPULSE_SMOKE_BASE_URL: ${{ needs.deploy.outputs.deployment_url }}
+          VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
 
       - name: Auto-revert failed production deployment
         if: failure() && github.ref_name == 'main'
@@ -443,7 +447,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
       - name: Smoke tests
         run: npm run ci:smoke
         env:
           LIVEPULSE_SMOKE_BASE_URL: ${{ needs.pr-preview-deploy.outputs.deployment_url }}
+          VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}

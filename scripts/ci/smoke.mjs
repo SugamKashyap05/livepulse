@@ -8,9 +8,14 @@ if (!baseUrl) {
 const normalizedBaseUrl = baseUrl.replace(/\/$/, "")
 
 async function check(path, validate) {
+  const headers = { "User-Agent": "LivePulse-CI-Smoke/1.0" }
+  if (process.env.VERCEL_PROTECTION_BYPASS) {
+    headers["x-vercel-protection-bypass"] = process.env.VERCEL_PROTECTION_BYPASS
+  }
+
   const response = await fetch(`${normalizedBaseUrl}${path}`, {
     redirect: "manual",
-    headers: { "User-Agent": "LivePulse-CI-Smoke/1.0" },
+    headers,
   })
 
   const result = await validate(response)
