@@ -19,7 +19,7 @@ async function runSync() {
   syncCount++
 
   try {
-    console.log(`[LivePulse AutoSync] Starting sync #${syncCount}...`)
+    console.log("[LivePulse AutoSync] Starting sync", { count: syncCount })
 
     let dbSources = await prisma.feedSource.findMany({
       where: { enabled: true },
@@ -154,12 +154,12 @@ async function runSync() {
       })
     }
 
-    console.log(
-      `[LivePulse AutoSync] Sync #${syncCount} done -`,
-      `saved: ${saved},`,
-      `skipped: ${skipped},`,
-      `total: ${articles.length}`
-    )
+    console.log("[LivePulse AutoSync] Sync done", {
+      count: syncCount,
+      saved,
+      skipped,
+      total: articles.length,
+    })
 
     triggerRagReindex()
 
