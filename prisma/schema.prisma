@@ -8,39 +8,35 @@ datasource db {
 }
 
 model NewsArticle {
-  id          String   @id
-  title       String
-  description String?
-  link        String   @unique
-  pubDate     DateTime
-  source      String
-  topic       String
-  slug        String
-  image       String?
-  fetchedAt   DateTime @default(now())
-
-  // AI Fields
-  summary     String?
-  sentiment   String? // "positive" | "neutral" | "negative"
-  aiTags      String? // JSON string of tags
-  aiProcessed Boolean @default(false)
-  aiGenerated Boolean @default(false) // Articles created by Scout
-
-  // Agentic Phase
-  factScore    Int? // 0-100
-  biasAnalysis String? // Short summary of political/emotional bias
-  agentNotes   String? // Internal agent discussion notes
-  published    Boolean           @default(true) // Set to false for AI drafts
-  publishedAt  DateTime?
+  id                 String               @id
+  title              String
+  description        String?
+  link               String               @unique
+  pubDate            DateTime
+  source             String
+  topic              String
+  slug               String
+  image              String?
+  fetchedAt          DateTime             @default(now())
+  summary            String?
+  sentiment          String?
+  aiTags             String?
+  aiProcessed        Boolean              @default(false)
+  aiGenerated        Boolean              @default(false)
+  factScore          Int?
+  biasAnalysis       String?
+  agentNotes         String?
+  published          Boolean              @default(true)
+  scored             Boolean              @default(false)
+  publishedAt        DateTime?
   scheduledPublishAt DateTime?
-  version      Int               @default(1)
-  scored       Boolean           @default(false) // Used for batch processing tracking
-  bookmarks    UserBookmark[]
-  reads        UserArticleRead[]
-  events       UserArticleEvent[]
-  contexts     UserArticleContext[]
-  embeddings   ArticleEmbedding[]
-  provenance   ArticleProvenance[]
+  version            Int                  @default(1)
+  embeddings         ArticleEmbedding[]
+  provenance         ArticleProvenance[]
+  contexts           UserArticleContext[]
+  events             UserArticleEvent[]
+  reads              UserArticleRead[]
+  bookmarks          UserBookmark[]
 
   @@index([topic])
   @@index([slug])
@@ -54,21 +50,20 @@ model NewsArticle {
 }
 
 model ArticleEmbedding {
-  id             String   @id @default(cuid())
+  id             String                @id @default(cuid())
   articleId      String
   chunkIndex     Int
-  content        String   @db.Text
+  content        String
   contentHash    String
-  embedding      Unsupported("vector(768)")
+  embedding      Unsupported("vector")
   embeddingModel String
   embeddingDim   Int
   topic          String
   source         String
   pubDate        DateTime
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  article NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  article        NewsArticle           @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@unique([articleId, chunkIndex, embeddingModel])
   @@index([articleId])
@@ -80,69 +75,72 @@ model ArticleEmbedding {
 
 model AgentActivity {
   id        String   @id @default(cuid())
-  agent     String // "Scout" | "Fact-Checker" | "Spin-Doctor"
-  action    String // "Verifying" | "Analyzing Bias" | "Scanning"
-  targetId  String? // Article ID
-  status    String // "thinking" | "completed" | "error"
-  content   String? // The "thought" or result snippet
+  agent     String
+  action    String
+  targetId  String?
+  status    String
+  content   String?
   createdAt DateTime @default(now())
 
   @@index([createdAt])
 }
 
 model DailyDigest {
-  id        String   @id @default(cuid())
-  date      String   @unique // "2026-03-27"
-  content   String // AI generated briefing
-  model     String? // The model used for this digest
+  id           String   @id @default(cuid())
+  date         String   @unique
+  content      String
+  model        String?
+  createdAt    DateTime @default(now())
   modelVersion String?
-  createdAt DateTime @default(now())
 }
 
 model AiLog {
-  id        String   @id @default(cuid())
-  action    String // "summarize" | "tag" | "sentiment" | "chat"
-  model     String // "llama3"
-  modelVersion String?
-  prompt    String?
-  tokens    Int?
-  ms        Int?
-  success   Boolean  @default(true)
-  error     String?
-  createdAt DateTime @default(now())
+  id               String   @id @default(cuid())
+  action           String
+  model            String
+  prompt           String?
+  tokens           Int?
+  ms               Int?
+  success          Boolean  @default(true)
+  error            String?
+  createdAt        DateTime @default(now())
+  modelVersion     String?
+  articleId        String?
+  completionTokens Int?
+  promptTokens     Int?
+  provider         String?
 }
 
 model AdminAiJob {
-  id          String    @id @default(cuid())
-  type        String
-  status      String    @default("queued")
-  title       String
-  params      Json
-  result      Json?
-  error       String?
-  progress    Int?
-  phase       String?
-  retryCount  Int       @default(0)
-  maxRetries  Int       @default(3)
-  schemaVersion String  @default("1")
-  modelVersion String?
-  scheduledFor DateTime?
-  cancelledAt DateTime?
-  parentJobId  String?
-  startedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  notifications AdminNotification[]
-  chatMessages  ManagerChatMessage[]
-  departmentEvents AdminDepartmentEvent[]
-  editorSessions EditorSession[]
-  editorMessages EditorMessage[]
-  editorContextRefs EditorContextRef[]
-  auditLogs AdminAuditLog[]
-  stateTransitions JobStateTransition[]
+  id                String                 @id @default(cuid())
+  type              String
+  status            String                 @default("queued")
+  title             String
+  params            Json
+  result            Json?
+  error             String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  phase             String?
+  progress          Int?
+  retryCount        Int                    @default(0)
+  maxRetries        Int                    @default(3)
+  schemaVersion     String                 @default("1")
+  scheduledFor      DateTime?
+  cancelledAt       DateTime?
+  parentJobId       String?
+  modelVersion      String?
+  auditLogs         AdminAuditLog[]
+  departmentEvents  AdminDepartmentEvent[]
+  notifications     AdminNotification[]
   articleProvenance ArticleProvenance[]
+  editorContextRefs EditorContextRef[]
+  editorMessages    EditorMessage[]
+  editorSessions    EditorSession[]
+  stateTransitions  JobStateTransition[]
+  chatMessages      ManagerChatMessage[]
 
   @@index([status, createdAt])
   @@index([status, updatedAt])
@@ -155,22 +153,21 @@ model AdminAiJob {
 }
 
 model ArticleProvenance {
-  id        String   @id @default(cuid())
-  articleId String
-  jobId     String?
-  kind      String
-  sourceType String
-  sourceName String?
-  sourceUrl  String?
-  action    String?
-  model     String?
+  id           String      @id @default(cuid())
+  articleId    String
+  jobId        String?
+  kind         String
+  sourceType   String
+  sourceName   String?
+  sourceUrl    String?
+  action       String?
+  model        String?
   modelVersion String?
-  confidence Float?
-  metadata  Json?
-  createdAt DateTime @default(now())
-
-  article NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  job AdminAiJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  confidence   Float?
+  metadata     Json?
+  createdAt    DateTime    @default(now())
+  article      NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  job          AdminAiJob? @relation(fields: [jobId], references: [id])
 
   @@index([articleId])
   @@index([articleId, kind, createdAt])
@@ -182,20 +179,19 @@ model ArticleProvenance {
 }
 
 model AdminNotification {
-  id        String    @id @default(cuid())
-  type      String
-  title     String
-  body      String
-  status    String    @default("unread")
-  jobId     String?
-  department String?
-  severity  String?
+  id                String                @id @default(cuid())
+  type              String
+  title             String
+  body              String
+  status            String                @default("unread")
+  jobId             String?
+  readAt            DateTime?
+  createdAt         DateTime              @default(now())
+  department        String?
+  severity          String?
   departmentEventId String?
-  readAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  job AdminAiJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  departmentEvent AdminDepartmentEvent? @relation(fields: [departmentEventId], references: [id], onDelete: SetNull)
+  departmentEvent   AdminDepartmentEvent? @relation(fields: [departmentEventId], references: [id])
+  job               AdminAiJob?           @relation(fields: [jobId], references: [id])
 
   @@index([status, createdAt])
   @@index([status, readAt, createdAt])
@@ -208,26 +204,25 @@ model AdminNotification {
 }
 
 model AdminDepartmentEvent {
-  id        String   @id @default(cuid())
-  department String
-  type      String
-  title     String
-  body      String   @db.Text
-  severity  String   @default("info")
-  status    String   @default("unread")
-  needsEditorReview Boolean @default(false)
-  jobId     String?
-  sourceType String  @default("manual")
-  metadata  Json?
-  readAt    DateTime?
-  resolvedAt DateTime?
-  schemaVersion String @default("1")
-  createdAt DateTime @default(now())
-
-  job AdminAiJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  notifications AdminNotification[]
+  id                String              @id @default(cuid())
+  department        String
+  type              String
+  title             String
+  body              String
+  severity          String              @default("info")
+  status            String              @default("unread")
+  needsEditorReview Boolean             @default(false)
+  jobId             String?
+  sourceType        String              @default("manual")
+  metadata          Json?
+  readAt            DateTime?
+  resolvedAt        DateTime?
+  createdAt         DateTime            @default(now())
+  schemaVersion     String              @default("1")
+  auditLogs         AdminAuditLog[]
+  job               AdminAiJob?         @relation(fields: [jobId], references: [id])
+  notifications     AdminNotification[]
   editorContextRefs EditorContextRef[]
-  auditLogs AdminAuditLog[]
 
   @@index([department, createdAt])
   @@index([department, status, createdAt])
@@ -240,14 +235,13 @@ model AdminDepartmentEvent {
 }
 
 model ManagerChatMessage {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   role      String
-  content   String   @db.Text
+  content   String
   metadata  Json?
   jobId     String?
-  createdAt DateTime @default(now())
-
-  job AdminAiJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  createdAt DateTime    @default(now())
+  job       AdminAiJob? @relation(fields: [jobId], references: [id])
 
   @@index([createdAt])
   @@index([jobId])
@@ -255,23 +249,22 @@ model ManagerChatMessage {
 }
 
 model EditorSession {
-  id            String   @id @default(cuid())
+  id            String             @id @default(cuid())
   title         String
-  scope         String   @default("general")
-  status        String   @default("active")
+  scope         String             @default("general")
+  status        String             @default("active")
   department    String?
   jobId         String?
   articleId     String?
   createdBy     String?
   metadata      Json?
   lastMessageAt DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  job AdminAiJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  messages EditorMessage[]
-  contextRefs EditorContextRef[]
-  auditLogs AdminAuditLog[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  auditLogs     AdminAuditLog[]
+  contextRefs   EditorContextRef[]
+  messages      EditorMessage[]
+  job           AdminAiJob?        @relation(fields: [jobId], references: [id])
 
   @@index([status, updatedAt])
   @@index([scope, status, updatedAt])
@@ -283,17 +276,16 @@ model EditorSession {
 }
 
 model EditorMessage {
-  id        String   @id @default(cuid())
+  id        String          @id @default(cuid())
   sessionId String
   role      String
-  content   String   @db.Text
+  content   String
   metadata  Json?
   jobId     String?
-  createdAt DateTime @default(now())
-
-  session EditorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  job AdminAiJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  createdAt DateTime        @default(now())
   auditLogs AdminAuditLog[]
+  job       AdminAiJob?     @relation(fields: [jobId], references: [id])
+  session   EditorSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, createdAt])
   @@index([sessionId, role, createdAt])
@@ -302,22 +294,21 @@ model EditorMessage {
 }
 
 model EditorContextRef {
-  id        String   @id @default(cuid())
-  sessionId String
-  type      String
-  targetId  String
-  label     String?
-  department String?
-  jobId     String?
+  id                String                @id @default(cuid())
+  sessionId         String
+  type              String
+  targetId          String
+  label             String?
+  department        String?
+  jobId             String?
   departmentEventId String?
-  articleId String?
-  metadata  Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  session EditorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  job AdminAiJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  departmentEvent AdminDepartmentEvent? @relation(fields: [departmentEventId], references: [id], onDelete: SetNull)
+  articleId         String?
+  metadata          Json?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  departmentEvent   AdminDepartmentEvent? @relation(fields: [departmentEventId], references: [id])
+  job               AdminAiJob?           @relation(fields: [jobId], references: [id])
+  session           EditorSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, type, createdAt])
   @@index([type, targetId])
@@ -329,25 +320,24 @@ model EditorContextRef {
 }
 
 model AdminAuditLog {
-  id        String   @id @default(cuid())
-  actorType String   @default("system")
-  actorId   String?
-  action    String
-  targetType String
-  targetId  String?
-  sessionId String?
-  messageId String?
-  jobId     String?
+  id                String                @id @default(cuid())
+  actorType         String                @default("system")
+  actorId           String?
+  action            String
+  targetType        String
+  targetId          String?
+  sessionId         String?
+  messageId         String?
+  jobId             String?
   departmentEventId String?
-  before    Json?
-  after     Json?
-  metadata  Json?
-  createdAt DateTime @default(now())
-
-  session EditorSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  message EditorMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
-  job AdminAiJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  departmentEvent AdminDepartmentEvent? @relation(fields: [departmentEventId], references: [id], onDelete: SetNull)
+  before            Json?
+  after             Json?
+  metadata          Json?
+  createdAt         DateTime              @default(now())
+  departmentEvent   AdminDepartmentEvent? @relation(fields: [departmentEventId], references: [id])
+  job               AdminAiJob?           @relation(fields: [jobId], references: [id])
+  message           EditorMessage?        @relation(fields: [messageId], references: [id])
+  session           EditorSession?        @relation(fields: [sessionId], references: [id])
 
   @@index([createdAt])
   @@index([actorType, createdAt])
@@ -361,19 +351,18 @@ model AdminAuditLog {
 }
 
 model JobStateTransition {
-  id        String   @id @default(cuid())
-  jobId     String
+  id         String     @id @default(cuid())
+  jobId      String
   fromStatus String?
   toStatus   String
   fromPhase  String?
   toPhase    String?
   event      String
-  actorType  String   @default("system")
+  actorType  String     @default("system")
   actorId    String?
   metadata   Json?
-  createdAt  DateTime @default(now())
-
-  job AdminAiJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now())
+  job        AdminAiJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@index([jobId, createdAt])
   @@index([toStatus, createdAt])
@@ -384,15 +373,15 @@ model JobStateTransition {
 }
 
 model UserProfile {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  country   String?
-  region    String?
-  city      String?
-  onboarded Boolean  @default(false)
-  personalizationEnabled Boolean @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  country                String?
+  region                 String?
+  city                   String?
+  onboarded              Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  personalizationEnabled Boolean  @default(true)
 }
 
 model UserTopicFollow {
@@ -428,27 +417,26 @@ model UserArticleRead {
 }
 
 model UserArticleEvent {
-  id          String   @id @default(cuid())
-  userId      String?
-  anonymousId String?
-  articleId   String
-  type        String
-  value       Float?
-  durationMs  Int?
-  visibleMs   Int?
-  scrollDepth Float?
-  feedScope   String?
+  id           String      @id @default(cuid())
+  userId       String?
+  anonymousId  String?
+  articleId    String
+  type         String
+  value        Float?
+  durationMs   Int?
+  visibleMs    Int?
+  scrollDepth  Float?
+  feedScope    String?
   feedPosition Int?
-  surface     String?
-  source      String?
-  sessionId   String?
-  pageViewId  String?
-  userAgent   String?
-  context     Json?
-  occurredAt  DateTime @default(now())
-  createdAt   DateTime @default(now())
-
-  article NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  surface      String?
+  source       String?
+  sessionId    String?
+  pageViewId   String?
+  context      Json?
+  occurredAt   DateTime    @default(now())
+  createdAt    DateTime    @default(now())
+  userAgent    String?
+  article      NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@index([userId, occurredAt])
   @@index([anonymousId, occurredAt])
@@ -461,29 +449,28 @@ model UserArticleEvent {
 }
 
 model UserArticleContext {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   userId          String
   articleId       String
-  impressionCount Int      @default(0)
-  clickCount      Int      @default(0)
-  readCount       Int      @default(0)
-  dwellMs         Int      @default(0)
+  impressionCount Int         @default(0)
+  clickCount      Int         @default(0)
+  readCount       Int         @default(0)
+  dwellMs         Int         @default(0)
   maxScrollDepth  Float?
-  bookmarked      Boolean  @default(false)
-  liked           Boolean  @default(false)
-  disliked        Boolean  @default(false)
-  hidden          Boolean  @default(false)
-  sharedCount     Int      @default(0)
-  commentCount    Int      @default(0)
-  aiActionCount   Int      @default(0)
+  bookmarked      Boolean     @default(false)
+  liked           Boolean     @default(false)
+  disliked        Boolean     @default(false)
+  hidden          Boolean     @default(false)
+  sharedCount     Int         @default(0)
+  commentCount    Int         @default(0)
+  aiActionCount   Int         @default(0)
   lastSeenAt      DateTime?
   lastClickedAt   DateTime?
   lastEngagedAt   DateTime?
-  score           Float    @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  article NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  score           Float       @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  article         NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, articleId])
   @@index([userId, score])
@@ -494,36 +481,36 @@ model UserArticleContext {
 }
 
 model UserInterestProfile {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  topicWeights Json?
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  topicWeights  Json?
   sourceWeights Json?
-  tagWeights   Json?
-  lastEventAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  tagWeights    Json?
+  lastEventAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([lastEventAt])
   @@index([updatedAt])
 }
 
 model FeedSource {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  url         String    @unique
-  topic       String
-  slug        String
-  region      String    @default("global")
-  enabled     Boolean   @default(true)
-  priority    Int       @default(0)
-  fetchIntervalMinutes Int @default(30)
-  lastFetched DateTime?
-  lastStatus  String?
-  failCount   Int       @default(0)
-  lastErrorAt DateTime?
-  lastErrorMessage String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  name                 String    @unique
+  url                  String    @unique
+  topic                String
+  slug                 String
+  region               String    @default("global")
+  enabled              Boolean   @default(true)
+  priority             Int       @default(0)
+  lastFetched          DateTime?
+  lastStatus           String?
+  failCount            Int       @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  fetchIntervalMinutes Int       @default(30)
+  lastErrorAt          DateTime?
+  lastErrorMessage     String?
 
   @@index([topic])
   @@index([region])

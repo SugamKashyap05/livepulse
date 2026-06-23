@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { useAuthGate, useSession } from "@/context/AuthGateContext"
 
 type Message = {
   role: "user" | "assistant"
@@ -14,6 +15,9 @@ export default function ChatWidget() {
   const [loading, setLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
+  const { triggerAuthGate } = useAuthGate()
+  const { hasSession } = useSession()
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
@@ -21,6 +25,11 @@ export default function ChatWidget() {
   async function sendMessage() {
     const text = input.trim()
     if (!text || loading) return
+
+    if (!hasSession) {
+      triggerAuthGate('general')
+      return
+    }
 
     const userMsg: Message = { role: "user", content: text }
     const newMessages = [...messages, userMsg]
@@ -34,6 +43,12 @@ export default function ChatWidget() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: newMessages }),
       })
+      if (res.status === 401) {
+        setMessages(messages)
+        setInput(text)
+        triggerAuthGate('general')
+        return
+      }
       const data = await res.json()
       setMessages((prev) => [
         ...prev,

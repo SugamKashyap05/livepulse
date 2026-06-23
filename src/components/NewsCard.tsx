@@ -7,6 +7,7 @@ import { getInternalArticleLink } from "@/lib/articleLinks"
 import { trackContextEvent } from "@/lib/contextTelemetry"
 import { showFeedbackToast } from "@/components/FeedbackToast"
 import type { NewsGridFeedContext } from "@/components/NewsGrid"
+import { useAuthGate, useSession } from "@/context/AuthGateContext"
 
 const TOPIC_COLORS: Record<string, string> = {
   World: "#6c8fff",
@@ -102,6 +103,9 @@ export default function NewsCard({
     }
   })
 
+  const { triggerAuthGate } = useAuthGate()
+  const { hasSession } = useSession()
+
   useEffect(() => {
     const node = articleRef.current
     if (!node || impressionSentRef.current || typeof IntersectionObserver === "undefined") {
@@ -185,6 +189,11 @@ export default function NewsCard({
       return
     }
 
+    if (!hasSession) {
+      triggerAuthGate('summarize')
+      return
+    }
+
     setLoadingSummary(true)
     setAiError(null)
     try {
@@ -198,6 +207,10 @@ export default function NewsCard({
         }),
       })
       const data = await res.json()
+      if (res.status === 401) {
+        triggerAuthGate('summarize')
+        return
+      }
       if (!res.ok || data.error) {
         setAiError("AI service is unavailable right now.")
         return
@@ -226,6 +239,11 @@ export default function NewsCard({
 
     if (sentiment) return
 
+    if (!hasSession) {
+      triggerAuthGate('sentiment')
+      return
+    }
+
     setLoadingSentiment(true)
     setAiError(null)
     try {
@@ -239,6 +257,10 @@ export default function NewsCard({
         }),
       })
       const data = await res.json()
+      if (res.status === 401) {
+        triggerAuthGate('sentiment')
+        return
+      }
       if (!res.ok || data.error) {
         setAiError("AI service is unavailable right now.")
         return
@@ -266,6 +288,11 @@ export default function NewsCard({
 
     if (aiTags.length > 0 || loadingTags) return
 
+    if (!hasSession) {
+      triggerAuthGate('tag')
+      return
+    }
+
     setLoadingTags(true)
     setAiError(null)
     try {
@@ -280,6 +307,10 @@ export default function NewsCard({
         }),
       })
       const data = await res.json()
+      if (res.status === 401) {
+        triggerAuthGate('tag')
+        return
+      }
       if (!res.ok || data.error) {
         setAiError("AI service is unavailable right now.")
         return
@@ -305,6 +336,11 @@ export default function NewsCard({
     e.preventDefault()
     if (shouldIgnoreFollowUpClick(e)) return
 
+    if (!hasSession) {
+      triggerAuthGate('general')
+      return
+    }
+
     const method = bookmarked ? "DELETE" : "POST"
     try {
       const response = await fetch("/api/user/bookmarks", {
@@ -322,7 +358,7 @@ export default function NewsCard({
       }
 
       if (response.status === 401) {
-        setAiError("Sign in to save bookmarks.")
+        triggerAuthGate('general')
         return
       }
 

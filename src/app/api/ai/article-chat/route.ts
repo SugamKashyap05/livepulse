@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { getClientIp, checkRateLimit } from "@/lib/rateLimit"
+import { sanitizeAiOutput } from "@/lib/security"
+import { getCurrentUserId } from "@/lib/auth"
 import {
   MODELS,
-  OllamaMessage,
   logAiAction,
   ollamaChatStream,
+  AI_PROVIDER,
 } from "@/lib/ollama"
 import {
   buildRetrievedContext,
@@ -28,7 +30,7 @@ function sendSse(
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
 }
 
-function sanitizeMessages(messages: unknown): OllamaMessage[] {
+function sanitizeMessages(messages: unknown): { role: "system" | "user" | "assistant"; content: string }[] {
   return (Array.isArray(messages) ? messages : [])
     .filter(
       (message: unknown) =>
@@ -72,11 +74,24 @@ export async function POST(request: Request) {
     )
   }
 
+  const userId = await getCurrentUserId()
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   let systemPrompt = ""
-  const model = MODELS.CHAT
+  const model = MODELS.smart
 
   try {
     const body = await request.json()
+    const inputText = body.text ?? body.message ?? (body.messages ? JSON.stringify(body.messages) : "");
+    if (inputText.length > 2000) {
+      return NextResponse.json(
+        { error: "Input too large." },
+        { status: 413 }
+      );
+    }
+    
     const { messages, articleId } = body
     const requestedTopic =
       typeof body.topic === "string" && body.topic.trim().length > 0
@@ -279,7 +294,7 @@ Today's date: ${new Date().toLocaleDateString("en-IN", {
       }
     }
 
-    const chatMessages: OllamaMessage[] = [
+    const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
       { role: "system", content: systemPrompt },
       ...sanitizedMessages,
     ]
@@ -292,18 +307,22 @@ Today's date: ${new Date().toLocaleDateString("en-IN", {
         try {
           sendSse(controller, encoder, { type: "start", model })
 
-          const result = await ollamaChatStream(
-            model,
-            chatMessages,
-            (token: string) => {
-              fullReply += token
-              sendSse(controller, encoder, { type: "token", content: token })
-            },
-            {
-              temperature: 0.5,
-              maxTokens: 640,
+          const startMs = Date.now()
+          const streamResult = await ollamaChatStream(chatMessages, model)
+
+          let promptTokens = 0
+          let completionTokens = 0
+
+          for await (const chunk of streamResult) {
+            const token = chunk.choices[0]?.delta?.content || ""
+            if (token) {
+              const sanitizedToken = sanitizeAiOutput(token).replace(/[<>]/g, "")
+              fullReply += sanitizedToken
+              sendSse(controller, encoder, { type: "token", content: sanitizedToken })
             }
-          )
+          }
+          
+          const ms = Date.now() - startMs
 
           contextStats.citedSources = extractCitedSources(fullReply)
           sendSse(controller, encoder, {
@@ -316,9 +335,10 @@ Today's date: ${new Date().toLocaleDateString("en-IN", {
           await logAiAction({
             action: "article-chat",
             model,
-            prompt: systemPrompt.slice(0, 200),
-            tokens: result.tokens ?? null,
-            ms: result.ms ?? null,
+            provider: AI_PROVIDER,
+            promptTokens,
+            completionTokens,
+            durationMs: ms,
             success: true,
           }).catch(() => {})
         } catch (error) {
@@ -330,11 +350,9 @@ Today's date: ${new Date().toLocaleDateString("en-IN", {
           await logAiAction({
             action: "article-chat",
             model,
-            prompt: systemPrompt.slice(0, 200),
-            tokens: null,
-            ms: null,
+            provider: AI_PROVIDER,
             success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
+            errorMessage: error instanceof Error ? error.message : "Unknown error",
           }).catch(() => {})
         } finally {
           controller.close()

@@ -899,7 +899,7 @@ async function runAiBatch(params: Record<string, unknown>, jobId?: string) {
         const start = Date.now()
         const res = await structuredChat<{ sentiment: string }>(
           prompt,
-          MODELS.FAST
+          MODELS.fast
         )
         const ms = Date.now() - start
 
@@ -911,7 +911,7 @@ async function runAiBatch(params: Record<string, unknown>, jobId?: string) {
         await prisma.aiLog.create({
           data: {
             action: "sentiment_batch",
-            model: MODELS.FAST,
+            model: MODELS.fast,
             prompt: article.title.slice(0, 50),
             ms,
           },
@@ -921,7 +921,7 @@ async function runAiBatch(params: Record<string, unknown>, jobId?: string) {
       if (task === "tag" || task === "all") {
         const prompt = `Tag this article with 3-5 keywords: ${article.title}. Return JSON: { "tags": ["tag1", "tag2", ...] }`
         const start = Date.now()
-        const res = await structuredChat<{ tags: string[] }>(prompt, MODELS.FAST)
+        const res = await structuredChat<{ tags: string[] }>(prompt, MODELS.fast)
         const ms = Date.now() - start
 
         await prisma.newsArticle.update({
@@ -932,7 +932,7 @@ async function runAiBatch(params: Record<string, unknown>, jobId?: string) {
         await prisma.aiLog.create({
           data: {
             action: "tag_batch",
-            model: MODELS.FAST,
+            model: MODELS.fast,
             prompt: article.title.slice(0, 50),
             ms,
           },
@@ -942,7 +942,7 @@ async function runAiBatch(params: Record<string, unknown>, jobId?: string) {
       if (task === "summarize" || task === "all") {
         const prompt = `Summarize in 3 concise bullet points: ${article.title}.\n\n${article.description || ""}`
         const start = Date.now()
-        const res = await chat(prompt, MODELS.SUMMARY)
+        const res = await chat(prompt, MODELS.fast)
         const ms = Date.now() - start
 
         await prisma.newsArticle.update({
@@ -953,7 +953,7 @@ async function runAiBatch(params: Record<string, unknown>, jobId?: string) {
         await prisma.aiLog.create({
           data: {
             action: "summary_batch",
-            model: MODELS.SUMMARY,
+            model: MODELS.fast,
             prompt: article.title.slice(0, 50),
             ms,
           },
@@ -1053,8 +1053,8 @@ async function runDigestGenerate(params: Record<string, unknown>, jobId?: string
   const content = await generateDigest(articles)
   const digest = await prisma.dailyDigest.upsert({
     where: { date: today },
-    update: { content, model: MODELS.DIGEST },
-    create: { date: today, content, model: MODELS.DIGEST },
+    update: { content, model: MODELS.smart },
+    create: { date: today, content, model: MODELS.smart },
   })
 
   return { success: true, cached: false, date: today, id: digest.id }

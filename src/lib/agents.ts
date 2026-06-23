@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db"
-import { ollamaChat, MODELS, logAiAction } from "@/lib/ollama"
+import { aiClient, withRetry, MODELS, logAiAction, AI_PROVIDER } from "@/lib/ollama"
 
 /**
  * AGENTIC NEWSROOM ENGINE
@@ -71,10 +71,20 @@ Format:
 SCORE: [number]
 REASON: [text]`
 
-    const result = await ollamaChat(MODELS.FAST, [
-      { role: "system", content: AGENTS.CHECKER.systemPrompt },
-      { role: "user", content: prompt }
-    ])
+    const startMs = Date.now()
+    const response = await withRetry(() => aiClient.chat.completions.create({
+      model: MODELS.fast,
+      messages: [
+        { role: "system", content: AGENTS.CHECKER.systemPrompt },
+        { role: "user", content: prompt }
+      ]
+    }))
+    const ms = Date.now() - startMs
+    const result = {
+      content: response.choices[0]?.message?.content ?? "",
+      tokens: response.usage?.total_tokens ?? 0,
+      ms
+    }
 
     const scoreMatch = result.content.match(/SCORE:\s*(\d+)/i)
     const reasonMatch = result.content.match(/REASON:\s*([\s\S]*)/i)
@@ -97,22 +107,23 @@ REASON: [text]`
 
     await logAiAction({
       action: "fact-check",
-      model: MODELS.FAST,
-      prompt: prompt.slice(0, 200),
-      tokens: result.tokens ?? null,
-      ms: result.ms ?? null,
+      model: MODELS.fast,
+      provider: AI_PROVIDER,
+      promptTokens: response.usage?.prompt_tokens ?? undefined,
+      completionTokens: response.usage?.completion_tokens ?? undefined,
+      durationMs: ms,
       success: true,
+      articleId: articleId,
     })
     return score
   } catch (e) {
     await logAiAction({
       action: "fact-check",
-      model: MODELS.FAST,
-      prompt: article.title.slice(0, 200),
-      tokens: null,
-      ms: null,
+      model: MODELS.fast,
+      provider: AI_PROVIDER,
       success: false,
-      error: String(e),
+      errorMessage: String(e),
+      articleId: articleId,
     }).catch(() => {})
     await prisma.agentActivity.update({
       where: { id: activity.id },
@@ -139,10 +150,20 @@ Content: ${sanitizeForPrompt(article.description)}
 
 Task: Summarize the emotional or political lean of this reporting in one sentence.`
 
-    const result = await ollamaChat(MODELS.FAST, [
-      { role: "system", content: AGENTS.SPIN.systemPrompt },
-      { role: "user", content: prompt }
-    ])
+    const startMs = Date.now()
+    const response = await withRetry(() => aiClient.chat.completions.create({
+      model: MODELS.fast,
+      messages: [
+        { role: "system", content: AGENTS.SPIN.systemPrompt },
+        { role: "user", content: prompt }
+      ]
+    }))
+    const ms = Date.now() - startMs
+    const result = {
+      content: response.choices[0]?.message?.content ?? "",
+      tokens: response.usage?.total_tokens ?? 0,
+      ms
+    }
 
     const bias = result.content.trim()
 
@@ -158,22 +179,23 @@ Task: Summarize the emotional or political lean of this reporting in one sentenc
 
     await logAiAction({
       action: "spin-doctor",
-      model: MODELS.FAST,
-      prompt: prompt.slice(0, 200),
-      tokens: result.tokens ?? null,
-      ms: result.ms ?? null,
+      model: MODELS.fast,
+      provider: AI_PROVIDER,
+      promptTokens: response.usage?.prompt_tokens ?? undefined,
+      completionTokens: response.usage?.completion_tokens ?? undefined,
+      durationMs: ms,
       success: true,
+      articleId: articleId,
     })
     return bias
   } catch (e) {
     await logAiAction({
       action: "spin-doctor",
-      model: MODELS.FAST,
-      prompt: article.title.slice(0, 200),
-      tokens: null,
-      ms: null,
+      model: MODELS.fast,
+      provider: AI_PROVIDER,
       success: false,
-      error: String(e),
+      errorMessage: String(e),
+      articleId: articleId,
     }).catch(() => {})
     await prisma.agentActivity.update({
       where: { id: activity.id },
@@ -234,10 +256,20 @@ TITLE: [Headline]
 CONTENT: [Body text]`
       lastPrompt = prompt
 
-      const result = await ollamaChat(MODELS.SUMMARY, [
-        { role: "system", content: AGENTS.WRITER.systemPrompt },
-        { role: "user", content: prompt }
-      ])
+      const startMs = Date.now()
+      const response = await withRetry(() => aiClient.chat.completions.create({
+        model: MODELS.fast,
+        messages: [
+          { role: "system", content: AGENTS.WRITER.systemPrompt },
+          { role: "user", content: prompt }
+        ]
+      }))
+      const ms = Date.now() - startMs
+      const result = {
+        content: response.choices[0]?.message?.content ?? "",
+        tokens: response.usage?.total_tokens ?? 0,
+        ms
+      }
 
       const titleMatch = result.content.match(/TITLE:\s*(.*)/i)
       const contentMatch = result.content.match(/CONTENT:\s*([\s\S]*)/i)
@@ -264,11 +296,13 @@ CONTENT: [Body text]`
       })
       await logAiAction({
         action: "scout",
-        model: MODELS.SUMMARY,
-        prompt: prompt.slice(0, 200),
-        tokens: result.tokens ?? null,
-        ms: result.ms ?? null,
+        model: MODELS.fast,
+        provider: AI_PROVIDER,
+        promptTokens: response.usage?.prompt_tokens ?? undefined,
+        completionTokens: response.usage?.completion_tokens ?? undefined,
+        durationMs: ms,
         success: true,
+        articleId: id,
       })
       generatedCount++
     }
@@ -282,12 +316,10 @@ CONTENT: [Body text]`
   } catch (e) {
     await logAiAction({
       action: "scout",
-      model: MODELS.SUMMARY,
-      prompt: lastPrompt.slice(0, 200),
-      tokens: null,
-      ms: null,
+      model: MODELS.fast,
+      provider: AI_PROVIDER,
       success: false,
-      error: String(e),
+      errorMessage: String(e),
     }).catch(() => {})
     await prisma.agentActivity.update({
       where: { id: activity.id },

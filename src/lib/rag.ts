@@ -145,7 +145,7 @@ export async function indexArticle(articleId: string) {
 
   for (let index = 0; index < chunks.length; index++) {
     const content = chunks[index]
-    const vector = await embedText(content)
+    const vector = await embedText(content, "passage")
     const vectorLiteral = normalizeVectorLiteral(vector)
 
     await prisma.$executeRaw`
@@ -309,7 +309,7 @@ export async function searchRagContext({
 
   let vector: number[]
   try {
-    vector = await embedText(sanitizedQuery)
+    vector = await embedText(sanitizedQuery, "query")
   } catch {
     return { chunks: [], rag: false, fallbackReason: "embed_unavailable" }
   }

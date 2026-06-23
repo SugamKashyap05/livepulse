@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation"
 import type { CSSProperties, FormEvent, ReactNode } from "react"
 import { useEffect, useRef, useState } from "react"
+import { useAuthGate, useSession } from "@/context/AuthGateContext"
 
 interface Message {
   role: "user" | "assistant"
@@ -151,6 +152,9 @@ export default function ChatAssistant() {
     ? pathname.split("/topic/")[1].split("/")[0]
     : "all"
 
+  const { triggerAuthGate } = useAuthGate()
+  const { hasSession } = useSession()
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -168,6 +172,12 @@ export default function ChatAssistant() {
       ...trimmedHistory,
       { role: "user", content: userMsg },
     ]
+
+    if (!hasSession) {
+      triggerAuthGate('chat')
+      return
+    }
+
     setInput("")
     setMessages(nextMessages)
     setIsTyping(true)
@@ -183,6 +193,14 @@ export default function ChatAssistant() {
           topic: currentTopic,
         }),
       })
+
+      if (response.status === 401) {
+        setMessages(trimmedHistory)
+        triggerAuthGate('chat')
+        setIsTyping(false)
+        setIsThinking(false)
+        return
+      }
 
       if (!response.ok || !response.body) {
         throw new Error("Chat failed")

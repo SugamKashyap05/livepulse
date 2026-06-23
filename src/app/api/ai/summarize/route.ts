@@ -1,13 +1,27 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { MODELS, chat, logAiAction } from "@/lib/ollama"
+import { MODELS, logAiAction, aiClient, withRetry, AI_PROVIDER } from "@/lib/ollama"
+import { getCurrentUserId } from "@/lib/auth"
+import { enforceInputLimit, sanitizeAiOutput } from "@/lib/security"
 
 export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
+    const userId = await getCurrentUserId()
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const body = await request.json()
-    const id = body?.id
+    const inputText = body.text ?? body.message ?? (body.messages ? JSON.stringify(body.messages) : "");
+    if (inputText.length > 50000) {
+      return NextResponse.json(
+        { error: "Input too large." },
+        { status: 413 }
+      );
+    }
+    const id = enforceInputLimit(body?.id, 100)
     const force = body?.force === true
 
     if (!id || typeof id !== "string") {
@@ -54,43 +68,52 @@ Description: ${description || "N/A"}
 
 Reader briefing:`
 
-    const start = Date.now()
-    let aiResponse: Awaited<ReturnType<typeof chat>>
+    const startMs = Date.now()
+    let aiResponse: string
+    let promptTokens = 0
+    let completionTokens = 0
     try {
-      aiResponse = await chat(prompt, MODELS.SUMMARY)
+      const completion = await withRetry(() => aiClient.chat.completions.create({
+        model: MODELS.fast,
+        messages: [{ role: "user", content: prompt }]
+      }, { timeout: 15000 }))
+      aiResponse = sanitizeAiOutput(completion.choices[0]?.message?.content ?? "")
+      promptTokens = completion.usage?.prompt_tokens ?? 0
+      completionTokens = completion.usage?.completion_tokens ?? 0
     } catch (error) {
       console.error("[AI summarize unavailable]:", error)
       await logAiAction({
         action: "summarize",
-        model: MODELS.SUMMARY,
-        prompt: prompt.slice(0, 200),
-        tokens: null,
-        ms: null,
+        model: MODELS.fast,
+        provider: AI_PROVIDER,
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+        articleId: article.id
       }).catch(() => {})
       return NextResponse.json(
         { error: "AI service unavailable", fallback: true },
         { status: 503 }
       )
     }
-    const ms = Date.now() - start
+    const ms = Date.now() - startMs
 
     await prisma.newsArticle.update({
       where: { id: article.id },
-      data: { summary: aiResponse.text },
+      data: { summary: aiResponse },
     })
 
     await logAiAction({
       action: "summarize",
-      model: MODELS.SUMMARY,
-      prompt: prompt.slice(0, 200),
-      tokens: aiResponse.tokens ?? null,
-      ms: aiResponse.ms ?? ms,
+      model: MODELS.fast,
+      provider: AI_PROVIDER,
+      promptTokens,
+      completionTokens,
+      durationMs: ms,
       success: true,
+      articleId: article.id
     })
 
-    return NextResponse.json({ summary: aiResponse.text, cached: false })
+    return NextResponse.json({ summary: aiResponse, cached: false })
   } catch (error) {
     console.error("[ai summarize] error:", error)
     return NextResponse.json(

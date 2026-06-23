@@ -3,6 +3,7 @@ import { isAdminAuthorized } from "@/lib/adminAuth"
 import {
   EMBEDDING_MODEL,
   logAiAction,
+  AI_PROVIDER,
 } from "@/lib/ollama"
 import {
   clearEmbeddingModel,
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
     await logAiAction({
       action: "rag-reindex",
       model: EMBEDDING_MODEL,
-      prompt: `start:${mode}`,
+      provider: AI_PROVIDER,
       success: true,
     }).catch(() => {})
 
@@ -78,8 +79,8 @@ export async function POST(request: Request) {
     await logAiAction({
       action: "rag-reindex",
       model: EMBEDDING_MODEL,
-      prompt: `complete:${mode}`,
-      ms: Date.now() - startedAt,
+      provider: AI_PROVIDER,
+      durationMs: Date.now() - startedAt,
       success: true,
     }).catch(() => {})
 
@@ -94,10 +95,10 @@ export async function POST(request: Request) {
     await logAiAction({
       action: "rag-reindex",
       model: EMBEDDING_MODEL,
-      prompt: "failed",
-      ms: Date.now() - startedAt,
+      provider: AI_PROVIDER,
+      durationMs: Date.now() - startedAt,
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
     }).catch(() => {})
     return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }

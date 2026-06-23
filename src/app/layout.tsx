@@ -2,10 +2,13 @@
 import type { Metadata, Viewport } from "next"
 import "./globals.css"
 import ChatAssistant from "@/components/ChatAssistant"
+import { AuthGateProvider } from "@/context/AuthGateContext"
+import { AuthGateModal } from "@/components/AuthGateModal"
+import { getCurrentUserId } from "@/lib/auth"
 
 export const metadata: Metadata = {
   title: "LivePulse - World News",
-  description: "Live news aggregator with local Ollama AI",
+  description: "Live news aggregator powered by AI",
 }
 
 export const viewport: Viewport = {
@@ -13,11 +16,14 @@ export const viewport: Viewport = {
   initialScale: 1,
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const userId = await getCurrentUserId()
+  const hasSession = !!userId
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -37,8 +43,9 @@ export default function RootLayout({
         display: "flex",
         flexDirection: "column",
       }}>
-        {children}
-        <footer style={{
+        <AuthGateProvider hasSession={hasSession}>
+          {children}
+          <footer style={{
           borderTop: "1px solid var(--border)",
           padding: "24px 32px",
           marginTop: "auto",
@@ -84,6 +91,8 @@ export default function RootLayout({
           </span>
         </footer>
         <ChatAssistant />
+        <AuthGateModal />
+        </AuthGateProvider>
       </body>
     </html>
   )

@@ -1,559 +1,288 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { prisma } from "@/lib/db"
-import crypto from "crypto"
-import { sanitizeAiText } from "@/lib/textSafety"
+// src/lib/ollama.ts
+// Unified AI provider client — supports NVIDIA NIM (production) and Ollama (local dev)
+
+import OpenAI from "openai";
+import { sanitizeAiOutput } from "@/lib/security";
+
+const provider = process.env.AI_PROVIDER ?? "ollama";
+
+export const aiClient = new OpenAI(
+  provider === "nvidia"
+    ? {
+        apiKey: process.env.NVIDIA_API_KEY!,
+        baseURL: process.env.NVIDIA_BASE_URL ?? "https://integrate.api.nvidia.com/v1",
+      }
+    : {
+        apiKey: "ollama",
+        baseURL: `${process.env.OLLAMA_BASE_URL ?? "http://localhost:11434"}/v1`,
+      }
+);
+
+export const MODELS = {
+  fast: provider === "nvidia"
+    ? "meta/llama-3.1-8b-instruct"
+    : "llama3.1:8b",
+
+  smart: provider === "nvidia"
+    ? "meta/llama-3.1-70b-instruct"
+    : "llama3.1:70b",
+
+  reasoning: provider === "nvidia"
+    ? "deepseek-ai/deepseek-v4-flash"
+    : "deepseek-r1:latest",
+
+  mini: provider === "nvidia"
+    ? "meta/llama-3.2-3b-instruct"
+    : "llama3.2:3b",
+
+  summarize: provider === "nvidia"
+    ? "mistralai/mixtral-8x7b-instruct-v0.1"
+    : "mistral:7b",
+
+  embed: provider === "nvidia"
+    ? "nvidia/nv-embedqa-e5-v5"
+    : "nomic-embed-text",
+} as const;
+
+export const AI_PROVIDER = provider;
+
+// Rate-limit safe retry wrapper — critical for NVIDIA NIM 40 RPM free tier
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  baseDelayMs = 1500
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const isRateLimit = err?.status === 429 || err?.message?.includes("429");
+      if (isRateLimit && attempt < maxRetries) {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        console.warn(`[AI] Rate limited. Retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise((res) => setTimeout(res, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("[AI] Max retries exceeded");
+}
+
+// ─────────────────────────────────────────────
+// EMBEDDINGS
+// ─────────────────────────────────────────────
 
 /**
- * Ollama AI Client Utility
- * Handles all communication with the local Ollama instance (localhost:11434).
+ * Provider-aware text embedding.
+ *
+ * inputType is REQUIRED by nvidia/nv-embedqa-e5-v5 (asymmetric model):
+ *   "passage" → for documents being indexed into the vector DB (indexArticle)
+ *   "query"   → for user search queries being vectorized (searchRagContext)
+ *
+ * Using the wrong type degrades retrieval quality silently — the model
+ * returns valid vectors but from the wrong embedding space.
+ *
+ * On Ollama (nomic-embed-text), inputType is accepted but ignored — safe.
  */
+export async function embedText(
+  text: string,
+  inputType: "query" | "passage" = "passage"
+): Promise<number[]> {
+  const res = await withRetry(() =>
+    aiClient.embeddings.create({
+      model: MODELS.embed,
+      input: text,
+      encoding_format: "float",
+      // NIM asymmetric models require input_type.
+      // The OpenAI SDK passes unknown fields through to the JSON body.
+      // @ts-expect-error — NIM-specific extension not in OpenAI types
+      input_type: AI_PROVIDER === "nvidia" ? inputType : undefined,
+    }, { signal: AbortSignal.timeout(15000) })
+  );
+  return res.data[0].embedding;
+}
 
-class Semaphore {
-  private max: number;
-  private current: number;
-  private queue: Array<() => void>;
+// Preserve the constant so rag.ts imports keep compiling
+export const EMBEDDING_MODEL = MODELS.embed;
+export const EMBEDDING_DIM = provider === "nvidia" ? 1024 : 768;
 
-  constructor(max: number) {
-    this.max = max;
-    this.current = 0;
-    this.queue = [];
-  }
+// ─────────────────────────────────────────────
+// STRUCTURED CHAT (JSON output)
+// ─────────────────────────────────────────────
 
-  async acquire(): Promise<void> {
-    if (this.current < this.max) {
-      this.current++;
-      return;
-    }
-    return new Promise((resolve) => this.queue.push(resolve));
-  }
+/**
+ * Calls the AI model and parses a typed JSON response.
+ * Uses prompt-level instruction for JSON — NIM models don't all support
+ * response_format: json_object, so we enforce via prompt + safe parse.
+ */
+export async function structuredChat<T>(
+  systemPrompt: string,
+  userMessage: string,
+  model: string = MODELS.smart
+): Promise<T> {
+  const jsonSystemPrompt = `${systemPrompt}
 
-  release(): void {
-    if (this.queue.length > 0) {
-      const next = this.queue.shift();
-      if (next) next();
-    } else {
-      this.current--;
-    }
-  }
+IMPORTANT: You must respond with valid JSON only. No markdown, no code fences, no explanation. Raw JSON object only.`;
 
-  getQueueLength(): number {
-    return this.queue.length;
+  const res = await withRetry(() =>
+    aiClient.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: jsonSystemPrompt },
+        { role: "user", content: userMessage },
+      ],
+      // Use json_object format for models that support it — NIM ignores
+      // this param gracefully if unsupported, so safe to include
+      response_format: { type: "json_object" },
+      temperature: 0.1, // low temp for deterministic structured output
+    }, { signal: AbortSignal.timeout(20000) })
+  );
+
+  const raw = sanitizeAiOutput(res.choices[0]?.message?.content ?? "");
+
+  try {
+    // Strip any accidental markdown fences if model ignored our instruction
+    const cleaned = raw
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
+    return JSON.parse(cleaned) as T;
+  } catch {
+    throw new Error(
+      `[AI] structuredChat: Failed to parse model response as JSON.\nRaw output: ${raw.slice(0, 300)}`
+    );
   }
 }
 
-const ollamaSemaphore = new Semaphore(1);
+/**
+ * Basic provider-aware chat wrapper
+ */
+export async function chat(prompt: string, model: string = MODELS.smart): Promise<{ text: string }> {
+  const res = await withRetry(() =>
+    aiClient.chat.completions.create({
+      model,
+      messages: [{ role: "user", content: prompt }],
+    }, { signal: AbortSignal.timeout(15000) })
+  );
+  const raw = res.choices[0]?.message?.content ?? "";
+  return { text: sanitizeAiOutput(raw) };
+}
+
+/**
+ * Generates a news digest from a list of articles.
+ */
+export async function generateDigest(articles: Array<{title: string, source: string, topic: string, description?: string | null, sentiment?: string | null}>): Promise<string> {
+  const context = articles.map(a => `- [${a.topic}] ${a.title} (${a.source})${a.sentiment ? ` [Sentiment: ${a.sentiment}]` : ''}${a.description ? `\n  ${a.description.slice(0, 200)}` : ''}`).join('\n\n');
+  const prompt = `You are the LivePulse executive editor. Below are the top news articles of the day. Write a brief, engaging daily news digest. Keep it under 4 paragraphs. Focus on the most important trends.\n\n${context}`;
+  
+  const res = await chat(prompt, MODELS.smart);
+  return res.text;
+}
+
+// ─────────────────────────────────────────────
+// STREAMING
+// ─────────────────────────────────────────────
+
+/**
+ * Provider-aware streaming chat.
+ * Name kept as ollamaChatStream for backward-compatible imports.
+ * Returns an OpenAI stream — pipe chunks to SSE/ReadableStream as before.
+ */
+export async function ollamaChatStream(
+  messages: { role: "system" | "user" | "assistant"; content: string }[],
+  model: string = MODELS.fast
+) {
+  // withRetry wraps the stream creation, not consumption.
+  // If 429 fires here the stream hasn't started yet — safe to retry.
+  return withRetry(() =>
+    aiClient.chat.completions.create({
+      model,
+      messages,
+      stream: true,
+    }, { signal: AbortSignal.timeout(30000) }) // stream can take longer
+  );
+}
+
+// ─────────────────────────────────────────────
+// RATE LIMIT GUARD  (replaces isAiOverloaded)
+// ─────────────────────────────────────────────
+
+/**
+ * Tracks requests in a 60-second sliding window.
+ * Returns true when approaching the 40 RPM NIM free-tier ceiling.
+ * On Ollama (local), always returns false — no rate limit applies.
+ *
+ * Call this before firing batch/autoSync jobs to pre-empt 429s.
+ */
+const _requestTimestamps: number[] = [];
+const RPM_CEILING = 38; // stay 2 below the 40 RPM hard limit
 
 export function isAiOverloaded(): boolean {
-  return ollamaSemaphore.getQueueLength() > 5;
-}
+  if (AI_PROVIDER !== "nvidia") return false; // Ollama has no limit
 
-export interface OllamaResponse {
-  model: string
-  created_at: string
-  response: string
-  done: boolean
-  total_duration?: number
-  load_duration?: number
-  prompt_eval_count?: number
-  eval_count?: number
-}
+  const now = Date.now();
+  const windowStart = now - 60_000;
 
-export interface OllamaMessage {
-  role: "system" | "user" | "assistant"
-  content: string
-}
-
-export type OllamaChatOptions = {
-  temperature?: number
-  maxTokens?: number
-  timeoutMs?: number
-  [key: string]: unknown
-}
-
-type ManagerContext = {
-  totalArticles: number
-  topics: string[]
-  lastSync: string
-  recentAiActions: string[]
-}
-
-const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434"
-const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY || ""
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "llama3"
-export const EMBEDDING_MODEL =
-  process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text:latest"
-
-function getOllamaHeaders() {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  }
-  if (OLLAMA_API_KEY) {
-    headers["Authorization"] = `Bearer ${OLLAMA_API_KEY}`
-  }
-  return headers
-}
-export const EMBEDDING_DIM = 768
-const EMBEDDING_CACHE_TTL_MS = 5 * 60 * 1000
-const EMBEDDING_CACHE_MAX = 100
-
-type EmbeddingCacheEntry = {
-  vector: number[]
-  expiresAt: number
-}
-
-const embeddingCache = new Map<string, EmbeddingCacheEntry>()
-
-// Specialized Models
-export const MODELS = {
-  SUMMARY: process.env.OLLAMA_SUMMARY_MODEL || "llama3:8b",
-  DIGEST: process.env.OLLAMA_DIGEST_MODEL || "llama3",
-  CHAT: process.env.OLLAMA_CHAT_MODEL || "llama3",
-  MANAGER: process.env.OLLAMA_MANAGER_MODEL || "llama3",
-  FAST: process.env.OLLAMA_FAST_MODEL || "phi3:3.8b",
-}
-
-function getEmbeddingCacheKey(text: string) {
-  return crypto
-    .createHash("sha256")
-    .update(text.toLowerCase().trim())
-    .digest("hex")
-}
-
-function setEmbeddingCache(key: string, vector: number[]) {
-  if (embeddingCache.has(key)) embeddingCache.delete(key)
-  embeddingCache.set(key, {
-    vector,
-    expiresAt: Date.now() + EMBEDDING_CACHE_TTL_MS,
-  })
-
-  while (embeddingCache.size > EMBEDDING_CACHE_MAX) {
-    const oldestKey = embeddingCache.keys().next().value
-    if (!oldestKey) break
-    embeddingCache.delete(oldestKey)
-  }
-}
-
-function getEmbeddingCache(key: string) {
-  const cached = embeddingCache.get(key)
-  if (!cached) return null
-
-  if (cached.expiresAt <= Date.now()) {
-    embeddingCache.delete(key)
-    return null
+  // Evict timestamps older than 60 seconds
+  while (_requestTimestamps.length > 0 && _requestTimestamps[0] < windowStart) {
+    _requestTimestamps.shift();
   }
 
-  embeddingCache.delete(key)
-  embeddingCache.set(key, cached)
-  return cached.vector
+  // Record this check as an intent to fire a request
+  _requestTimestamps.push(now);
+
+  return _requestTimestamps.length >= RPM_CEILING;
 }
 
-type AiLogInput = {
-  action: string
-  model: string
-  prompt?: string | null
-  tokens?: number | null
-  ms?: number | null
-  success?: boolean
-  error?: string | null
-}
+// ─────────────────────────────────────────────
+// AUDIT LOGGING  (preserves logAiAction)
+// ─────────────────────────────────────────────
 
-export async function logAiAction(input: AiLogInput): Promise<void>
-export async function logAiAction(
-  action: string,
-  model: string,
-  ms: number,
-  tokens?: number,
-  success?: boolean,
-  error?: string
-): Promise<void>
-export async function logAiAction(
-  inputOrAction: AiLogInput | string,
-  model?: string,
-  ms?: number,
-  tokens?: number,
-  success: boolean = true,
-  error?: string
-) {
-  const input: AiLogInput = typeof inputOrAction === "string"
-    ? {
-        action: inputOrAction,
-        model: model || DEFAULT_MODEL,
-        ms: ms ?? null,
-        tokens: tokens ?? null,
-        success,
-        error: error ?? null,
-      }
-    : inputOrAction
-
+/**
+ * Logs every AI call to the database for forensics, cost tracking,
+ * and fine-tuning corpus. NEVER remove — this is your audit trail.
+ *
+ * If the DB write fails, we log to console but do NOT throw —
+ * a logging failure must never crash an inference call.
+ */
+export async function logAiAction(params: {
+  action: string;       // e.g. "summarize", "fact-check", "embed"
+  model: string;        // exact model string used
+  provider?: string;    // "nvidia" | "ollama"
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  durationMs?: number | null;
+  success: boolean;
+  errorMessage?: string | null;
+  articleId?: string | null;
+  // Legacy aliases
+  prompt?: string | null;
+  tokens?: number | null;
+  ms?: number | null;
+  error?: string | null;
+}): Promise<void> {
   try {
+    // Dynamic import keeps Prisma out of edge runtime if any routes use it
+    const { prisma } = await import("@/lib/db"); // Using @/lib/db as it was used in other places
     await prisma.aiLog.create({
       data: {
-        action: input.action,
-        model: input.model,
-        prompt: input.prompt ?? null,
-        tokens: input.tokens ?? null,
-        ms: input.ms ?? null,
-        success: input.success ?? true,
-        error: input.error ?? null,
-      }
-    })
-  } catch (e) {
-    console.error("[AI Log Error]:", e)
+        action: params.action,
+        model: params.model,
+        provider: params.provider ?? AI_PROVIDER,
+        promptTokens: params.promptTokens ?? null,
+        completionTokens: params.completionTokens ?? params.tokens ?? null,
+        tokens: params.tokens ?? null,
+        prompt: params.prompt ?? null,
+        ms: params.durationMs ?? params.ms ?? null,
+        success: params.success,
+        error: params.errorMessage ?? params.error ?? null,
+        articleId: params.articleId ?? null,
+      } as any,
+    });
+  } catch (err) {
+    // Logging must never crash inference — degrade gracefully
+    console.error("[AI] logAiAction failed to write to DB:", err);
   }
-}
-
-async function getOllamaErrorMessage(response: Response) {
-  const body = await response.text().catch(() => "")
-  if (!body) {
-    return `Ollama error ${response.status}: ${response.statusText}`
-  }
-
-  try {
-    const data = JSON.parse(body) as { error?: string }
-    return `Ollama error ${response.status}: ${data.error || body}`
-  } catch {
-    return `Ollama error ${response.status}: ${body}`
-  }
-}
-
-export async function ollamaChat(
-  model: string,
-  messages: OllamaMessage[],
-  options: OllamaChatOptions = {}
-) {
-  await ollamaSemaphore.acquire()
-  const start = Date.now()
-  const timeoutMs =
-    typeof options.timeoutMs === "number" ? options.timeoutMs : 300000
-  const { timeoutMs: _timeoutMs, ...ollamaOptions } = options
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
-      method: "POST",
-      headers: getOllamaHeaders(),
-      signal: controller.signal,
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: false,
-        options: ollamaOptions,
-      }),
-    })
-
-    if (!response.ok) throw new Error(`Ollama error: ${response.statusText}`)
-    const data = await response.json()
-    const ms = Date.now() - start
-    const tokens = (data.prompt_eval_count || 0) + (data.eval_count || 0)
-    
-    // We don't always want to log every single chat completion here to prevent noise,
-    // call logAiAction externally if needed.
-    
-    return {
-      content: data.message.content,
-      tokens,
-      ms
-    }
-  } catch (error) {
-    console.error("[Ollama Chat Error]:", error)
-    throw error
-  } finally {
-    clearTimeout(timeout)
-    ollamaSemaphore.release()
-  }
-}
-
-export async function ollamaChatStream(
-  model: string,
-  messages: OllamaMessage[],
-  onChunk: (token: string) => void,
-  options: Record<string, unknown> = {}
-): Promise<{ content: string; tokens: number; ms: number }> {
-  await ollamaSemaphore.acquire()
-  try {
-    const start = Date.now()
-    const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
-      method: "POST",
-      headers: getOllamaHeaders(),
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-        options,
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(await getOllamaErrorMessage(response))
-    }
-
-    if (!response.body) {
-      throw new Error("No response body from Ollama")
-    }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let fullContent = ""
-    let totalTokens = 0
-    let buffer = ""
-
-    const readLine = (line: string) => {
-      if (!line.trim()) return false
-
-      const parsed = JSON.parse(line)
-      if (parsed.message?.content) {
-        fullContent += parsed.message.content
-        onChunk(parsed.message.content)
-      }
-      if (typeof parsed.eval_count === "number") {
-        totalTokens = parsed.eval_count
-      }
-      if (typeof parsed.prompt_eval_count === "number") {
-        totalTokens += parsed.prompt_eval_count
-      }
-
-      return Boolean(parsed.done)
-    }
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split("\n")
-      buffer = lines.pop() ?? ""
-
-      for (const line of lines) {
-        if (readLine(line)) {
-          return {
-            content: fullContent,
-            tokens: totalTokens,
-            ms: Date.now() - start,
-          }
-        }
-      }
-    }
-
-    buffer += decoder.decode()
-    if (buffer.trim()) {
-      readLine(buffer)
-    }
-
-    return {
-      content: fullContent,
-      tokens: totalTokens,
-      ms: Date.now() - start,
-    }
-  } finally {
-    ollamaSemaphore.release()
-  }
-}
-
-export async function chat(prompt: string, model: string = DEFAULT_MODEL) {
-  await ollamaSemaphore.acquire()
-  const start = Date.now()
-  try {
-    const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
-      method: "POST",
-      headers: getOllamaHeaders(),
-      body: JSON.stringify({
-        model,
-        prompt,
-        stream: false,
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(await getOllamaErrorMessage(response))
-    }
-
-    const data: OllamaResponse = await response.json()
-    const ms = Date.now() - start
-    const tokens = (data.prompt_eval_count || 0) + (data.eval_count || 0)
-    
-    return {
-      text: data.response,
-      ms,
-      model: data.model,
-      tokens
-    }
-  } catch (error) {
-    console.error("[Ollama Chat Error]:", error)
-    throw error
-  } finally {
-    ollamaSemaphore.release()
-  }
-}
-
-export async function structuredChat<T>(
-  prompt: string,
-  model: string = DEFAULT_MODEL
-): Promise<T> {
-  await ollamaSemaphore.acquire()
-  try {
-    const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
-      method: "POST",
-      headers: getOllamaHeaders(),
-      body: JSON.stringify({
-        model,
-        prompt: `${prompt}\n\nIMPORTANT: Return ONLY valid JSON. Do not include any explanations or markdown formatting outside the JSON block.`,
-        stream: false,
-        format: "json",
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(await getOllamaErrorMessage(response))
-    }
-
-    const data: OllamaResponse = await response.json()
-    
-    let rawText = data.response.trim()
-    const match = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
-    if (match && match[1]) {
-      rawText = match[1].trim()
-    } else {
-      // Clean up truncated markdown blocks
-      rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
-      const firstBrace = Math.min(
-        rawText.indexOf('{') !== -1 ? rawText.indexOf('{') : Infinity,
-        rawText.indexOf('[') !== -1 ? rawText.indexOf('[') : Infinity
-      )
-      const lastBrace = Math.max(
-        rawText.lastIndexOf('}'),
-        rawText.lastIndexOf(']')
-      )
-      if (firstBrace !== Infinity && lastBrace !== -1 && lastBrace >= firstBrace) {
-        rawText = rawText.substring(firstBrace, lastBrace + 1)
-      }
-    }
-
-    return JSON.parse(rawText) as T
-  } catch (error) {
-    console.error("[Ollama Structured Error]:", error)
-    throw error
-  } finally {
-    ollamaSemaphore.release()
-  }
-}
-
-export async function embedText(text: string): Promise<number[]> {
-  const sanitized = sanitizeAiText(text, 500)
-  if (!sanitized) throw new Error("Embedding input is empty")
-
-  const cacheKey = getEmbeddingCacheKey(sanitized)
-  const cached = getEmbeddingCache(cacheKey)
-  if (cached) return cached
-
-  await ollamaSemaphore.acquire()
-  const start = Date.now()
-  try {
-    let response = await fetch(`${OLLAMA_HOST}/api/embeddings`, {
-      method: "POST",
-      headers: getOllamaHeaders(),
-      body: JSON.stringify({
-        model: EMBEDDING_MODEL,
-        prompt: sanitized,
-      }),
-    })
-
-    if (response.status === 404) {
-      response = await fetch(`${OLLAMA_HOST}/api/embed`, {
-        method: "POST",
-        headers: getOllamaHeaders(),
-        body: JSON.stringify({
-          model: EMBEDDING_MODEL,
-          input: sanitized,
-        }),
-      })
-    }
-
-    if (!response.ok) {
-      throw new Error(await getOllamaErrorMessage(response))
-    }
-
-    const data = await response.json()
-    const vector = Array.isArray(data.embedding)
-      ? data.embedding
-      : Array.isArray(data.embeddings?.[0])
-        ? data.embeddings[0]
-        : null
-
-    if (!vector || vector.length !== EMBEDDING_DIM) {
-      throw new Error(
-        `Embedding dimension mismatch: expected ${EMBEDDING_DIM}, got ${vector?.length ?? 0}`
-      )
-    }
-
-    setEmbeddingCache(cacheKey, vector)
-    return vector
-  } catch (error) {
-    await logAiAction({
-      action: "embed",
-      model: EMBEDDING_MODEL,
-      prompt: sanitized.slice(0, 200),
-      tokens: null,
-      ms: Date.now() - start,
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    }).catch(() => {})
-    console.error("[Ollama Embedding Error]:", error)
-    throw error
-  } finally {
-    ollamaSemaphore.release()
-  }
-}
-
-export async function generateDigest(
-  articles: {
-    title: string
-    source: string
-    topic: string
-    description?: string | null
-    sentiment?: string | null
-  }[]
-) {
-  const prompt = `Generate a concise, professional daily news digest:
-
-${articles
-  .map(
-    (a) =>
-      `[${a.topic.toUpperCase()}] ${a.title} (${a.source})${
-        a.sentiment ? ` [${a.sentiment}]` : ""
-      }${a.description ? `\n  ${a.description.slice(0, 100)}` : ""}`
-  )
-  .join("\n")}
-
-Group by topic. Note overall sentiment trends per section.
-Highlight the most important breaking stories.`
-  
-  const result = await ollamaChat(MODELS.DIGEST, [
-    { role: "system", content: "You are a professional news editor creating a concise daily briefing." },
-    { role: "user", content: prompt }
-  ], {
-    num_ctx: 8192
-  })
-  
-  return result.content
-}
-
-export async function managerChat(
-  messages: OllamaMessage[],
-  context: ManagerContext
-) {
-  const systemPrompt = `You are the LivePulse Manager AI. 
-Current System Context:
-- Total Articles: ${context.totalArticles}
-- Topics: ${context.topics.join(", ")}
-- Last Sync: ${context.lastSync}
-- Recent AI Actions: ${context.recentAiActions.join(", ")}
-
-You help the administrator manage the newsroom, analyze performance, and orchestrate the agents. Answer professionally and with insight based on the provided context.`
-
-  const result = await ollamaChat(MODELS.MANAGER, [
-    { role: "system", content: systemPrompt },
-    ...messages
-  ])
-  
-  return result.content
 }

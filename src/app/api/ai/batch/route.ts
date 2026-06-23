@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { isAdminAuthorized } from "@/lib/adminAuth"
 import { prisma } from "@/lib/db"
-import { MODELS, chat, structuredChat } from "@/lib/ollama"
+import { MODELS, structuredChat, logAiAction, aiClient, withRetry, AI_PROVIDER } from "@/lib/ollama"
+import { sanitizeAiOutput } from "@/lib/security"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -54,9 +55,10 @@ export async function POST(request: Request) {
       try {
         // Sentiment Processing
         if (task === "sentiment" || task === "all") {
-          const prompt = `Analyze the sentiment: ${article.title}. Return JSON: { "sentiment": "positive" | "neutral" | "negative", "confidence": 0.0-1.0 }`
+          const systemPrompt = `Analyze the sentiment. Return JSON: { "sentiment": "positive" | "neutral" | "negative", "confidence": 0.0-1.0 }`
+          const userMessage = article.title
           const start = Date.now()
-          const res = await structuredChat<{ sentiment: string }>(prompt, MODELS.FAST)
+          const res = await structuredChat<{ sentiment: string }>(systemPrompt, userMessage, MODELS.fast)
           const ms = Date.now() - start
           
           await prisma.newsArticle.update({
@@ -64,16 +66,22 @@ export async function POST(request: Request) {
             data: { sentiment: res.sentiment.toLowerCase(), scored: true },
           })
           
-          await prisma.aiLog.create({
-            data: { action: "sentiment_batch", model: MODELS.FAST, prompt: article.title.substring(0, 50), ms }
+          await logAiAction({
+            action: "sentiment_batch",
+            model: MODELS.fast,
+            provider: AI_PROVIDER,
+            durationMs: ms,
+            success: true,
+            articleId: article.id
           })
         }
 
         // Tagging Processing
         if (task === "tag" || task === "all") {
-          const prompt = `Tag this article with 3-5 keywords: ${article.title}. Return JSON: { "tags": ["tag1", "tag2", ...] }`
+          const systemPrompt = `Tag this article with 3-5 keywords. Return JSON: { "tags": ["tag1", "tag2", ...] }`
+          const userMessage = article.title
           const start = Date.now()
-          const res = await structuredChat<{ tags: string[] }>(prompt, MODELS.FAST)
+          const res = await structuredChat<{ tags: string[] }>(systemPrompt, userMessage, MODELS.fast)
           const ms = Date.now() - start
 
           await prisma.newsArticle.update({
@@ -81,8 +89,13 @@ export async function POST(request: Request) {
             data: { aiTags: JSON.stringify(res.tags), aiProcessed: true },
           })
 
-          await prisma.aiLog.create({
-            data: { action: "tag_batch", model: MODELS.FAST, prompt: article.title.substring(0, 50), ms }
+          await logAiAction({
+            action: "tag_batch",
+            model: MODELS.fast,
+            provider: AI_PROVIDER,
+            durationMs: ms,
+            success: true,
+            articleId: article.id
           })
         }
 
@@ -90,16 +103,29 @@ export async function POST(request: Request) {
         if (task === "summarize" || task === "all") {
           const prompt = `Summarize in 3 concise bullet points: ${article.title}. \n\n ${article.description || ""}`
           const start = Date.now()
-          const res = await chat(prompt, MODELS.SUMMARY)
+          const completion = await withRetry(() => aiClient.chat.completions.create({
+            model: MODELS.fast,
+            messages: [{ role: "user", content: prompt }]
+          }))
+          const text = sanitizeAiOutput(completion.choices[0]?.message?.content ?? "")
+          const promptTokens = completion.usage?.prompt_tokens ?? 0
+          const completionTokens = completion.usage?.completion_tokens ?? 0
           const ms = Date.now() - start
 
           await prisma.newsArticle.update({
             where: { id: article.id },
-            data: { summary: res.text },
+            data: { summary: text },
           })
 
-          await prisma.aiLog.create({
-            data: { action: "summary_batch", model: MODELS.SUMMARY, prompt: article.title.substring(0, 50), ms }
+          await logAiAction({
+            action: "summary_batch",
+            model: MODELS.fast,
+            provider: AI_PROVIDER,
+            promptTokens,
+            completionTokens,
+            durationMs: ms,
+            success: true,
+            articleId: article.id
           })
         }
 

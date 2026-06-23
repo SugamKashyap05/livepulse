@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getMutableCurrentUserId } from "@/lib/auth"
+import { getMutableCurrentUserId, getCurrentUserId } from "@/lib/auth"
 import { getClientIp, checkRateLimit } from "@/lib/rateLimit"
+import { sanitizeAiOutput } from "@/lib/security"
 import {
   MODELS,
-  OllamaMessage,
   logAiAction,
   ollamaChatStream,
+  AI_PROVIDER,
 } from "@/lib/ollama"
 import {
   buildRetrievedContext,
@@ -45,7 +46,7 @@ function sendSse(
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
 }
 
-function sanitizeMessages(messages: unknown): OllamaMessage[] {
+function sanitizeMessages(messages: unknown): { role: "system" | "user" | "assistant"; content: string }[] {
   return (Array.isArray(messages) ? messages : [])
     .filter(
       (message: unknown): message is ClientChatMessage =>
@@ -120,15 +121,28 @@ export async function POST(request: Request) {
   }
 
   let systemPrompt = ""
-  const model = MODELS.CHAT
+  const model = MODELS.smart
 
   try {
     const body = await request.json()
+    const inputText = body.text ?? body.message ?? (body.messages ? JSON.stringify(body.messages) : "");
+    if (inputText.length > 2000) {
+      return NextResponse.json(
+        { error: "Input too large." },
+        { status: 413 }
+      );
+    }
+    
     const rawTopic = body.topic
     const topic =
       typeof rawTopic === "string" && VALID_TOPICS.has(rawTopic.toLowerCase())
         ? rawTopic.toLowerCase()
         : "all"
+
+    const userId = await getCurrentUserId()
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
     const sanitizedMessages = sanitizeMessages(body.messages)
     if (sanitizedMessages.length === 0) {
@@ -138,8 +152,6 @@ export async function POST(request: Request) {
     const latestUserMessage =
       [...sanitizedMessages].reverse().find((message) => message.role === "user")
         ?.content ?? ""
-
-    const userId = await getMutableCurrentUserId()
     let followedTopics: string[] = []
 
     if (userId) {
@@ -191,7 +203,7 @@ ${retrievedContext}`
       }
     }
 
-    const chatMessages: OllamaMessage[] = [
+    const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
       { role: "system", content: systemPrompt },
       ...sanitizedMessages,
     ]
@@ -204,18 +216,22 @@ ${retrievedContext}`
         try {
           sendSse(controller, encoder, { type: "start", model })
 
-          const result = await ollamaChatStream(
-            model,
-            chatMessages,
-            (token: string) => {
-              fullReply += token
-              sendSse(controller, encoder, { type: "token", content: token })
-            },
-            {
-              temperature: 0.6,
-              maxTokens: 512,
+          const startMs = Date.now()
+          const streamResult = await ollamaChatStream(chatMessages, model)
+
+          let promptTokens = 0
+          let completionTokens = 0
+          
+          for await (const chunk of streamResult) {
+            const token = chunk.choices[0]?.delta?.content || ""
+            if (token) {
+              const sanitizedToken = sanitizeAiOutput(token).replace(/[<>]/g, "")
+              fullReply += sanitizedToken
+              sendSse(controller, encoder, { type: "token", content: sanitizedToken })
             }
-          )
+          }
+          
+          const ms = Date.now() - startMs
 
           contextStats.citedSources = extractCitedSources(fullReply)
           sendSse(controller, encoder, {
@@ -228,9 +244,10 @@ ${retrievedContext}`
           await logAiAction({
             action: "chat",
             model,
-            prompt: systemPrompt.slice(0, 200),
-            tokens: result.tokens ?? null,
-            ms: result.ms ?? null,
+            provider: AI_PROVIDER,
+            promptTokens,
+            completionTokens,
+            durationMs: ms,
             success: true,
           }).catch(() => {})
         } catch (error) {
@@ -242,11 +259,9 @@ ${retrievedContext}`
           await logAiAction({
             action: "chat",
             model,
-            prompt: systemPrompt.slice(0, 200),
-            tokens: null,
-            ms: null,
+            provider: AI_PROVIDER,
             success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
+            errorMessage: error instanceof Error ? error.message : "Unknown error",
           }).catch(() => {})
         } finally {
           controller.close()

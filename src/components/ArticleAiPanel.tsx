@@ -3,6 +3,7 @@
 import type { CSSProperties, FormEvent, ReactNode } from "react"
 import { useEffect, useRef, useState } from "react"
 import { trackContextEvent } from "@/lib/contextTelemetry"
+import { useAuthGate, useSession } from "@/context/AuthGateContext"
 
 type ChatMessage = {
   role: "user" | "assistant"
@@ -125,6 +126,9 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const lastTouchActivationAt = useRef(0)
 
+  const { triggerAuthGate } = useAuthGate()
+  const { hasSession } = useSession()
+
   const sentimentConfig =
     SENTIMENT_CONFIG[sentiment as keyof typeof SENTIMENT_CONFIG]
   const summaryLines = summary ? splitSummary(summary) : []
@@ -151,6 +155,11 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
   async function handleSummarize(force = false) {
     if ((summary && !force) || loadingSummary) return
 
+    if (!hasSession) {
+      triggerAuthGate('summarize')
+      return
+    }
+
     setLoadingSummary(true)
     setError(null)
     try {
@@ -164,6 +173,10 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
           force,
         }),
       })
+      if (res.status === 401) {
+        triggerAuthGate('summarize')
+        return
+      }
       const data = await res.json()
       if (!res.ok || data.error) {
         setError("AI service is unavailable right now.")
@@ -183,6 +196,11 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
   async function handleSentiment() {
     if (sentiment || loadingSentiment) return
 
+    if (!hasSession) {
+      triggerAuthGate('sentiment')
+      return
+    }
+
     setLoadingSentiment(true)
     setError(null)
     try {
@@ -195,6 +213,10 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
           description: article.description,
         }),
       })
+      if (res.status === 401) {
+        triggerAuthGate('sentiment')
+        return
+      }
       const data = await res.json()
       if (!res.ok || data.error) {
         setError("AI service is unavailable right now.")
@@ -214,6 +236,11 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
   async function handleTags() {
     if (tags.length > 0 || loadingTags) return
 
+    if (!hasSession) {
+      triggerAuthGate('tag')
+      return
+    }
+
     setLoadingTags(true)
     setError(null)
     try {
@@ -227,6 +254,10 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
           topic: article.topic,
         }),
       })
+      if (res.status === 401) {
+        triggerAuthGate('tag')
+        return
+      }
       const data = await res.json()
       if (!res.ok || data.error) {
         setError("AI service is unavailable right now.")
@@ -246,6 +277,11 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
   async function askArticle(question: string) {
     const cleanQuestion = question.trim()
     if (!cleanQuestion || isTyping) return
+
+    if (!hasSession) {
+      triggerAuthGate('chat')
+      return
+    }
 
     const nextMessages: ChatMessage[] = [
       ...messages.slice(-11),
@@ -270,6 +306,11 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
           messages: nextMessages.slice(-12),
         }),
       })
+
+      if (res.status === 401) {
+        triggerAuthGate('chat')
+        return
+      }
 
       if (!res.ok || !res.body) {
         throw new Error("Article chat failed")

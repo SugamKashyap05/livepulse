@@ -15,6 +15,9 @@ export async function GET() {
   try {
     const today = new Date().toISOString().slice(0, 10)
     const userId = await getMutableCurrentUserId()
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
     const digestKey = getDigestKey(today, userId)
     let topicFilter: string[] = []
 

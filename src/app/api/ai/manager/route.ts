@@ -4,9 +4,9 @@ import { isAdminAuthorized } from "@/lib/adminAuth"
 import { prisma } from "@/lib/db"
 import {
   MODELS,
-  OllamaMessage,
   logAiAction,
   ollamaChatStream,
+  AI_PROVIDER,
 } from "@/lib/ollama"
 import {
   buildAdminAiActionCards,
@@ -152,15 +152,15 @@ export async function POST(request: Request) {
         ? rawSessionId.trim().slice(0, 120)
         : LEGACY_SESSION_ID
     const editorContext = asRecord(rawEditorContext)
-    const safeMessages: OllamaMessage[] = Array.isArray(messages)
+      const safeMessages: { role: "system" | "user" | "assistant"; content: string }[] = Array.isArray(messages)
       ? messages
           .filter(
-            (message): message is OllamaMessage =>
+            (message): message is { role: "user" | "assistant"; content: string } =>
               message &&
               typeof message === "object" &&
-              ((message as OllamaMessage).role === "user" ||
-                (message as OllamaMessage).role === "assistant") &&
-              typeof (message as OllamaMessage).content === "string"
+              ((message as { role: string }).role === "user" ||
+                (message as { role: string }).role === "assistant") &&
+              typeof (message as { content: string }).content === "string"
           )
           .map((message) => ({
             role: message.role,
@@ -487,7 +487,7 @@ Valid action formats:
 
 CRITICAL: Never say "I started", "I will run", or "I notified you" unless an action card was clicked and a job was actually created. You can only SUGGEST. The admin must click to confirm.`
 
-    const chatMessages: OllamaMessage[] = [
+    const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
       { role: "system", content: systemPrompt },
       ...(sessionHistory.length > 0
         ? sessionHistory
@@ -512,16 +512,22 @@ CRITICAL: Never say "I started", "I will run", or "I notified you" unless an act
         let fullReply = ""
 
         try {
-          sendSse(controller, encoder, { type: "start", model: MODELS.MANAGER })
+          sendSse(controller, encoder, { type: "start", model: MODELS.smart })
 
-          const result = await ollamaChatStream(
-            MODELS.MANAGER,
-            chatMessages,
-            (token: string) => {
+          const startMs = Date.now()
+          const streamResult = await ollamaChatStream(chatMessages, MODELS.smart)
+
+          let promptTokens = 0
+          let completionTokens = 0
+
+          for await (const chunk of streamResult) {
+            const token = chunk.choices[0]?.delta?.content || ""
+            if (token) {
               fullReply += token
               sendSse(controller, encoder, { type: "token", content: token })
             }
-          )
+          }
+          const ms = Date.now() - startMs
 
           const parsedActionCards = parseActionCards(fullReply)
           const actionCards =
@@ -539,7 +545,7 @@ CRITICAL: Never say "I started", "I will run", or "I notified you" unless an act
           sendSse(controller, encoder, {
             type: "done",
             content: cleanReply,
-            model: MODELS.MANAGER,
+            model: MODELS.smart,
             actionCards,
           })
 
@@ -551,8 +557,8 @@ CRITICAL: Never say "I started", "I will run", or "I notified you" unless an act
                 content: cleanReply || "No response",
                 metadata:
                   actionCards.length > 0
-                    ? ({ actionCards, model: MODELS.MANAGER, tokens: result.tokens, ms: result.ms, source: "editor_chat" } as Prisma.InputJsonObject)
-                    : ({ model: MODELS.MANAGER, tokens: result.tokens, ms: result.ms, source: "editor_chat" } as Prisma.InputJsonObject),
+                    ? ({ actionCards, model: MODELS.smart, tokens: completionTokens, ms, source: "editor_chat" } as Prisma.InputJsonObject)
+                    : ({ model: MODELS.smart, tokens: completionTokens, ms, source: "editor_chat" } as Prisma.InputJsonObject),
               },
             }).catch((error) => {
               console.error("[manager] save editor assistant msg:", error)
@@ -596,8 +602,8 @@ CRITICAL: Never say "I started", "I will run", or "I notified you" unless an act
                 content: cleanReply || "No response",
                 metadata:
                   actionCards.length > 0
-                    ? ({ actionCards, model: MODELS.MANAGER, tokens: result.tokens, ms: result.ms, sessionId, source: "editor_chat" } as Prisma.InputJsonObject)
-                    : ({ model: MODELS.MANAGER, tokens: result.tokens, ms: result.ms, sessionId, source: "editor_chat" } as Prisma.InputJsonObject),
+                    ? ({ actionCards, model: MODELS.smart, tokens: completionTokens, ms, sessionId, source: "editor_chat" } as Prisma.InputJsonObject)
+                    : ({ model: MODELS.smart, tokens: completionTokens, ms, sessionId, source: "editor_chat" } as Prisma.InputJsonObject),
               },
             }).catch((error) => {
               console.error("[manager] save assistant msg:", error)
@@ -606,10 +612,11 @@ CRITICAL: Never say "I started", "I will run", or "I notified you" unless an act
 
           await logAiAction({
             action: "manager",
-            model: MODELS.MANAGER,
-            prompt: systemPrompt.slice(0, 200),
-            tokens: result.tokens ?? null,
-            ms: result.ms ?? Date.now() - start,
+            model: MODELS.smart,
+            provider: AI_PROVIDER,
+            promptTokens,
+            completionTokens,
+            durationMs: ms,
             success: true,
           }).catch(() => {})
         } catch (error) {
@@ -620,12 +627,11 @@ CRITICAL: Never say "I started", "I will run", or "I notified you" unless an act
           })
           await logAiAction({
             action: "manager",
-            model: MODELS.MANAGER,
-            prompt: systemPrompt.slice(0, 200),
-            tokens: null,
-            ms: Date.now() - start,
+            model: MODELS.smart,
+            provider: AI_PROVIDER,
+            durationMs: Date.now() - start,
             success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
+            errorMessage: error instanceof Error ? error.message : "Unknown error",
           }).catch(() => {})
         } finally {
           controller.close()
