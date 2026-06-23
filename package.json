@@ -24,6 +24,7 @@
     "@neondatabase/auth": "^0.4.1-beta",
     "@neondatabase/neon-js": "^0.6.1-beta",
     "@prisma/client": "^5.22.0",
+    "@vercel/speed-insights": "^2.0.0",
     "date-fns": "^4.1.0",
     "jose": "^6.2.3",
     "next": "16.2.9",

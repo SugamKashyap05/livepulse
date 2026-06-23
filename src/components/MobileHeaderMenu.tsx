@@ -27,7 +27,7 @@ export default function MobileHeaderMenu({
   useEffect(() => {
     if (!isMenuOpen) return
 
-    function handlePointerUp(event: PointerEvent) {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
       if (
         wrapperRef.current &&
         !wrapperRef.current.contains(event.target as Node)
@@ -40,10 +40,12 @@ export default function MobileHeaderMenu({
       if (event.key === "Escape") setIsMenuOpen(false)
     }
 
-    document.addEventListener("pointerup", handlePointerUp)
+    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("touchstart", handleClickOutside, { passive: true })
     document.addEventListener("keydown", handleKeyDown)
     return () => {
-      document.removeEventListener("pointerup", handlePointerUp)
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("touchstart", handleClickOutside)
       document.removeEventListener("keydown", handleKeyDown)
     }
   }, [isMenuOpen])
@@ -100,7 +102,9 @@ export default function MobileHeaderMenu({
             <Link
               key={item.href}
               href={item.href}
-              onClick={() => setIsMenuOpen(false)}
+              onClick={() => {
+                setTimeout(() => setIsMenuOpen(false), 50)
+              }}
               style={mobileLinkStyle}
             >
               {item.label}

@@ -4,7 +4,7 @@ import { createAdminSession } from "@/lib/adminSessions"
 const AUTH_RESPONSE_DELAY_MS = 100
 const MAX_ATTEMPTS = 5
 const WINDOW_MS = 60 * 1000
-const LOCKOUT_MS = 15 * 60 * 1000
+const LOCKOUT_MS = 60 * 1000
 
 const loginAttempts = new Map<string, {
   count: number

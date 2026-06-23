@@ -291,20 +291,6 @@ export default function ChatAssistant() {
   }
 
   function handleLauncherClick() {
-    if (Date.now() - lastTouchActivationAt.current < 700) return
-    toggleChat()
-  }
-
-  function handleLauncherPointerUp(event: React.PointerEvent<HTMLButtonElement>) {
-    if (event.pointerType === "mouse") return
-    event.preventDefault()
-    lastTouchActivationAt.current = Date.now()
-    toggleChat()
-  }
-
-  function handleLauncherTouchEnd(event: React.TouchEvent<HTMLButtonElement>) {
-    event.preventDefault()
-    lastTouchActivationAt.current = Date.now()
     toggleChat()
   }
 
@@ -313,8 +299,6 @@ export default function ChatAssistant() {
       <button
         className="chat-launcher"
         onClick={handleLauncherClick}
-        onPointerUp={handleLauncherPointerUp}
-        onTouchEnd={handleLauncherTouchEnd}
         style={floatingButtonStyle}
         onMouseEnter={(event) => {
           if (!canUseHover()) return

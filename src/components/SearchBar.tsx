@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { Search as SearchIcon } from "lucide-react"
 
 export default function SearchBar() {
   const router = useRouter()
@@ -77,6 +78,21 @@ export default function SearchBar() {
             padding: "7px 4px",
           }}
         />
+        <button
+          type="submit"
+          aria-label="Search"
+          style={{
+            border: "none",
+            background: "transparent",
+            color: "var(--muted)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            padding: "2px 4px",
+          }}
+        >
+          <SearchIcon size={14} />
+        </button>
         {query.length > 0 && (
           <button
             type="button"

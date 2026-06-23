@@ -48,6 +48,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           }}>
             No results for &quot;{q}&quot;.
           </div>
+        ) : q.length < 2 ? (
+          <div style={{
+            textAlign: "center",
+            padding: "80px 0",
+            fontFamily: "'IBM Plex Mono', monospace",
+            color: "var(--muted)",
+          }}>
+            Search across all sources and topics.
+          </div>
         ) : (
           <ArticleFeed
             initialArticles={feed.articles}

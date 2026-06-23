@@ -69,6 +69,11 @@ export async function getCurrentUser(): Promise<CachedNeonUser | null> {
 export async function getMutableCurrentUserId() {
   if (!isNeonAuthConfigured()) return null
 
-  const { data: session } = await auth.getSession()
-  return session?.user?.id ?? null
+  try {
+    const { data: session } = await auth.getSession()
+    return session?.user?.id ?? null
+  } catch (error) {
+    console.error("Neon Auth getSession error:", error)
+    return null
+  }
 }

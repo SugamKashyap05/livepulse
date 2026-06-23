@@ -5,6 +5,7 @@ import ChatAssistant from "@/components/ChatAssistant"
 import { AuthGateProvider } from "@/context/AuthGateContext"
 import { AuthGateModal } from "@/components/AuthGateModal"
 import { getCurrentUserId } from "@/lib/auth"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 export const metadata: Metadata = {
   title: "LivePulse - World News",
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
 }
 
 export default async function RootLayout({
@@ -92,6 +94,7 @@ export default async function RootLayout({
         </footer>
         <ChatAssistant />
         <AuthGateModal />
+        <SpeedInsights />
         </AuthGateProvider>
       </body>
     </html>
