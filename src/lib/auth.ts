@@ -6,7 +6,9 @@ const baseUrl = process.env.NEON_AUTH_BASE_URL
 const rawCookieSecret = process.env.NEON_AUTH_COOKIE_SECRET
 const isValidSecret = rawCookieSecret && rawCookieSecret.length >= 32
 const cookieSecret = isValidSecret ? rawCookieSecret : "development-neon-auth-cookie-secret-32"
-const sessionDataCookieName = "__Secure-neon-auth.local.session_data"
+const localSessionDataCookieName = "__Secure-neon-auth.local.session_data"
+const prodSessionDataCookieName = "__Secure-neon-auth.session_data"
+const fallbackSessionDataCookieName = "neon-auth.session_data"
 
 type CachedNeonUser = {
   id?: string
@@ -38,7 +40,11 @@ export async function getCurrentUser(): Promise<CachedNeonUser | null> {
 
   try {
     const cookieStore = await cookies()
-    const sessionData = cookieStore.get(sessionDataCookieName)?.value
+    const sessionData = 
+      cookieStore.get(prodSessionDataCookieName)?.value ||
+      cookieStore.get(localSessionDataCookieName)?.value ||
+      cookieStore.get(fallbackSessionDataCookieName)?.value
+
     if (!sessionData || !cookieSecret) return null
 
     const { payload } = await jwtVerify(

@@ -18,8 +18,13 @@ function normalizeTopics(topics: unknown) {
 async function getSessionUser() {
   if (!isNeonAuthConfigured()) return null
 
-  const { data: session } = await auth.getSession()
-  return session?.user ?? null
+  try {
+    const { data: session } = await auth.getSession()
+    return session?.user ?? null
+  } catch (error) {
+    console.error("Neon Auth getSession error:", error)
+    return null
+  }
 }
 
 export async function GET() {
