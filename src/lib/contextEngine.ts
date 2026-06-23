@@ -273,27 +273,22 @@ async function updateUserContext({
       })
     }
 
-    if (existingProfile) {
-      await tx.userInterestProfile.update({
-        where: { userId },
-        data: {
-          topicWeights,
-          sourceWeights,
-          tagWeights,
-          lastEventAt,
-        },
-      })
-    } else {
-      await tx.userInterestProfile.create({
-        data: {
-          userId,
-          topicWeights,
-          sourceWeights,
-          tagWeights,
-          lastEventAt,
-        },
-      })
-    }
+    await tx.userInterestProfile.upsert({
+      where: { userId },
+      update: {
+        topicWeights,
+        sourceWeights,
+        tagWeights,
+        lastEventAt,
+      },
+      create: {
+        userId,
+        topicWeights,
+        sourceWeights,
+        tagWeights,
+        lastEventAt,
+      },
+    })
   })
 }
 
