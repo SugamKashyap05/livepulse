@@ -98,7 +98,7 @@ export async function embedText(
       // The OpenAI SDK passes unknown fields through to the JSON body.
       // @ts-expect-error — NIM-specific extension not in OpenAI types
       input_type: AI_PROVIDER === "nvidia" ? inputType : undefined,
-    }, { signal: AbortSignal.timeout(15000) })
+    }, { signal: AbortSignal.timeout(20000) })
   );
   return res.data[0].embedding;
 }
@@ -136,7 +136,7 @@ IMPORTANT: You must respond with valid JSON only. No markdown, no code fences, n
       // this param gracefully if unsupported, so safe to include
       response_format: { type: "json_object" },
       temperature: 0.1, // low temp for deterministic structured output
-    }, { signal: AbortSignal.timeout(20000) })
+    }, { signal: AbortSignal.timeout(45000) })
   );
 
   const raw = sanitizeAiOutput(res.choices[0]?.message?.content ?? "");
@@ -164,7 +164,7 @@ export async function chat(prompt: string, model: string = MODELS.smart): Promis
     aiClient.chat.completions.create({
       model,
       messages: [{ role: "user", content: prompt }],
-    }, { signal: AbortSignal.timeout(15000) })
+    }, { signal: AbortSignal.timeout(45000) })
   );
   const raw = res.choices[0]?.message?.content ?? "";
   return { text: sanitizeAiOutput(raw) };
@@ -201,7 +201,7 @@ export async function ollamaChatStream(
       model,
       messages,
       stream: true,
-    }, { signal: AbortSignal.timeout(30000) }) // stream can take longer
+    }, { signal: AbortSignal.timeout(55000) }) // stream can take longer
   );
 }
 
