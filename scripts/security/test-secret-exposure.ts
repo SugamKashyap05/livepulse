@@ -9,7 +9,6 @@
  */
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
 
 const NEXT_STATIC = path.join(process.cwd(), ".next", "static");
 const SECRETS_TO_FIND = [

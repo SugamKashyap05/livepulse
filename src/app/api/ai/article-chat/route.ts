@@ -310,8 +310,8 @@ Today's date: ${new Date().toLocaleDateString("en-IN", {
           const startMs = Date.now()
           const streamResult = await ollamaChatStream(chatMessages, model)
 
-          let promptTokens = 0
-          let completionTokens = 0
+          const promptTokens = 0
+          const completionTokens = 0
 
           for await (const chunk of streamResult) {
             const token = chunk.choices[0]?.delta?.content || ""

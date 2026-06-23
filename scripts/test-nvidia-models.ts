@@ -65,13 +65,13 @@ async function testChatModel(label: string, model: string) {
     const ms = Date.now() - start;
     console.log(`${statusIcon("ok")} "${reply}" (${ms}ms)`);
     return "ok";
-  } catch (err: any) {
+  } catch (err: unknown) {
     const ms = Date.now() - start;
-    if (err?.status === 429) {
+    if (err && typeof err === "object" && "status" in err && err.status === 429) {
       console.log(`${statusIcon("rate_limit")} Rate limited (${ms}ms) — model exists but quota hit`);
       return "rate_limit";
     }
-    console.log(`${statusIcon("fail")} ${err?.message ?? "Unknown error"} (${ms}ms)`);
+    console.log(`${statusIcon("fail")} ${err instanceof Error ? err.message : "Unknown error"} (${ms}ms)`);
     return "fail";
   }
 }
@@ -94,13 +94,13 @@ async function testEmbedModel(label: string, model: string) {
     const ms = Date.now() - start;
     console.log(`${statusIcon("ok")} Vector dims: ${dims} (${ms}ms)`);
     return "ok";
-  } catch (err: any) {
+  } catch (err: unknown) {
     const ms = Date.now() - start;
-    if (err?.status === 429) {
+    if (err && typeof err === "object" && "status" in err && err.status === 429) {
       console.log(`${statusIcon("rate_limit")} Rate limited (${ms}ms)`);
       return "rate_limit";
     }
-    console.log(`${statusIcon("fail")} ${err?.message ?? "Unknown error"} (${ms}ms)`);
+    console.log(`${statusIcon("fail")} ${err instanceof Error ? err.message : "Unknown error"} (${ms}ms)`);
     return "fail";
   }
 }
@@ -136,7 +136,7 @@ async function main() {
 
   let allPassed = true;
   for (const r of results) {
-    const icon = statusIcon(r.status as any);
+    const icon = statusIcon(r.status as "ok" | "rate_limit" | "fail");
     console.log(`  ${icon}  ${r.label}`);
     console.log(`      Model: ${r.model}`);
     if (r.status === "fail") allPassed = false;

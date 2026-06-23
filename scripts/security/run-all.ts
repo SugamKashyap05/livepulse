@@ -18,7 +18,7 @@ const tests = [
 for (const test of tests) {
   try {
     execSync(`npx ts-node ${test}`, { stdio: "inherit" });
-  } catch (err) {
+  } catch {
     console.error(`Error running ${test}`);
   }
 }

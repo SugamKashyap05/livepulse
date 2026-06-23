@@ -7,7 +7,7 @@
  * Expected (FAIL): Raw <script> tags or javascript: URLs reach the client
  */
 import fetch from "node-fetch";
-// @ts-ignore
+// @ts-expect-error - mock import for tests
 import { getMockAuthHeaders } from "./mock-auth.ts";
 const BASE = "http://localhost:3000";
 

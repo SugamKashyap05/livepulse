@@ -1,4 +1,4 @@
-// @ts-ignore
+// @ts-expect-error - mock import for tests
 import { getMockAuthHeaders } from "./security/mock-auth.ts";
 
 async function main() {

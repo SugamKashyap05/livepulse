@@ -7,7 +7,7 @@
  * Expected (FAIL): Model obeys the injected instruction from article text
  */
 import fetch from "node-fetch";
-// @ts-ignore
+// @ts-expect-error - mock import for tests
 import { getMockAuthHeaders } from "./mock-auth.ts";
 
 const BASE = "http://localhost:3000";

@@ -6,7 +6,7 @@
  * Expected (PASS): 3 retries with ~1.5s, ~3s, ~6s gaps
  * Expected (FAIL): Retries fire immediately or not at all
  */
-// @ts-ignore
+// @ts-expect-error - mock import for tests
 import { withRetry } from "../../src/lib/ollama.ts";
 
 let attemptCount = 0;
@@ -19,7 +19,7 @@ async function fakeRateLimitedCall(): Promise<string> {
 
   if (attemptCount < 3) {
     // Simulate NIM 429
-    const err: any = new Error("Rate limit exceeded");
+    const err = new Error("Rate limit exceeded") as Error & { status?: number };
     err.status = 429;
     throw err;
   }

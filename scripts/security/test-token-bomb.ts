@@ -8,7 +8,7 @@
  *                  spike, timeout, or cost amplification
  */
 import fetch from "node-fetch";
-// @ts-ignore
+// @ts-expect-error - mock import for tests
 import { getMockAuthHeaders } from "./mock-auth.ts";
 
 const BASE = "http://localhost:3000";
@@ -41,8 +41,8 @@ async function main() {
       } else if (res.status === 200) {
         console.log(`  ❌ FAIL: ${label} input reached the model. No size limit enforced.`);
       }
-    } catch (err: any) {
-      console.log(`[${label}] Error: ${err.message}`);
+    } catch (err: unknown) {
+      console.log(`[${label}] Error: ${err instanceof Error ? err.message : String(err)}`);
     }
     await new Promise(r => setTimeout(r, 1000));
   }

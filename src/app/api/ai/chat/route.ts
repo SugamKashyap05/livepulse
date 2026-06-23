@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getMutableCurrentUserId, getCurrentUserId } from "@/lib/auth"
+import { getCurrentUserId } from "@/lib/auth"
 import { getClientIp, checkRateLimit } from "@/lib/rateLimit"
 import { sanitizeAiOutput } from "@/lib/security"
 import {
@@ -219,8 +219,8 @@ ${retrievedContext}`
           const startMs = Date.now()
           const streamResult = await ollamaChatStream(chatMessages, model)
 
-          let promptTokens = 0
-          let completionTokens = 0
+          const promptTokens = 0
+          const completionTokens = 0
           
           for await (const chunk of streamResult) {
             const token = chunk.choices[0]?.delta?.content || ""

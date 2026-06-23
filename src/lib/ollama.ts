@@ -55,8 +55,8 @@ export async function withRetry<T>(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
-    } catch (err: any) {
-      const isRateLimit = err?.status === 429 || err?.message?.includes("429");
+    } catch (err: unknown) {
+      const isRateLimit = err && typeof err === "object" && ("status" in err && err.status === 429 || ("message" in err && typeof err.message === "string" && err.message.includes("429")));
       if (isRateLimit && attempt < maxRetries) {
         const delay = baseDelayMs * Math.pow(2, attempt);
         console.warn(`[AI] Rate limited. Retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
@@ -279,6 +279,7 @@ export async function logAiAction(params: {
         success: params.success,
         error: params.errorMessage ?? params.error ?? null,
         articleId: params.articleId ?? null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
     });
   } catch (err) {

@@ -7,8 +7,7 @@
  * Expected (FAIL): JSON.parse on attacker-controlled string executes
  *                  unexpected logic or crashes the process
  */
-// @ts-ignore
-import { structuredChat } from "../../src/lib/ollama.ts";
+export {};
 
 const MALICIOUS_JSON_PAYLOADS = [
   // Prototype pollution
@@ -40,23 +39,23 @@ async function main() {
         .replace(/```\s*$/i, "")
         .trim();
 
-      const parsed = JSON.parse(cleaned);
+      JSON.parse(cleaned);
 
       // Check prototype pollution
-      const polluted = ({} as any).admin === true || ({} as any).isAdmin === true;
+      const polluted = ({} as Record<string, unknown>).admin === true || ({} as Record<string, unknown>).isAdmin === true;
       if (polluted) {
         console.log(`❌ CRITICAL: Prototype pollution via: ${payload.slice(0, 50)}`);
       } else {
         console.log(`✅ Parsed safely: ${payload.slice(0, 50)}`);
       }
-    } catch (e: any) {
+    } catch {
       // parse error is EXPECTED for malformed JSON — confirm it throws, not crashes
       console.log(`✅ Correctly threw on: ${payload.slice(0, 50)}`);
     }
   }
 
   // Check that prototype is actually clean
-  const testObj: any = {};
+  const testObj: Record<string, unknown> = {};
   if (testObj.admin !== true && testObj.isAdmin !== true) {
     console.log("\n✅ PASS: No prototype pollution detected after all payloads.");
   } else {

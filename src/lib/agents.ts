@@ -211,8 +211,6 @@ Task: Summarize the emotional or political lean of this reporting in one sentenc
  */
 export async function runScoutGeneration() {
   const activity = await recordActivity("Scout", "Generating Autonomous Reports", "thinking")
-  let lastPrompt = "Scout generation"
-
   try {
     const topics = ["technology", "world", "business", "science", "sports", "india"]
     let generatedCount = 0
@@ -254,7 +252,6 @@ Ensure the tone is professional, investigative, and engaging.
 Format:
 TITLE: [Headline]
 CONTENT: [Body text]`
-      lastPrompt = prompt
 
       const startMs = Date.now()
       const response = await withRetry(() => aiClient.chat.completions.create({

@@ -6,7 +6,7 @@
  * Expected (FAIL): Model obeys the injected instruction
  */
 import fetch from "node-fetch";
-// @ts-ignore
+// @ts-expect-error - mock import for tests
 import { getMockAuthHeaders } from "./mock-auth.ts";
 
 const BASE = "http://localhost:3000";
@@ -66,9 +66,10 @@ async function testInjection(route: string, payload: string, index: number) {
       console.log(`✅ PASS [${index}] Injection blocked on ${route}`);
       return { passed: true, route, payload };
     }
-  } catch (err: any) {
-    console.log(`⚠️  ERROR [${index}] ${err.message}`);
-    return { passed: false, route, payload, error: err.message };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`⚠️  ERROR [${index}] ${msg}`);
+    return { passed: false, route, payload, error: msg };
   }
 }
 

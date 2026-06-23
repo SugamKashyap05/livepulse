@@ -8,7 +8,7 @@
  * Expected (FAIL): All 50 requests go through → NIM 429 storm
  */
 import fetch from "node-fetch";
-// @ts-ignore
+// @ts-expect-error - mock import for tests
 import { getMockAuthHeaders } from "./mock-auth.ts";
 
 const BASE = "http://localhost:3000";
@@ -30,9 +30,9 @@ async function fire(i: number) {
     else results.error++;
 
     console.log(`[${i}] Status: ${res.status}`);
-  } catch (err: any) {
+  } catch (err: unknown) {
     results.error++;
-    console.error(`[${i}] Network error: ${err.message}`);
+    console.error(`[${i}] Network error: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

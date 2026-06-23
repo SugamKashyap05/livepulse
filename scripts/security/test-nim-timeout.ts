@@ -7,7 +7,7 @@
  * Expected (FAIL): Server hangs forever, blocking the Node.js event loop
  */
 import fetch from "node-fetch";
-// @ts-ignore
+// @ts-expect-error - mock import for tests
 import { getMockAuthHeaders } from "./mock-auth.ts";
 
 const TIMEOUT_MS = 35_000; // give it 35s max
@@ -29,7 +29,7 @@ async function main() {
       method: "POST",
       headers,
       body: JSON.stringify({ messages: [{ role: "user", content: "Test timeout handling" }] }),
-      signal: controller.signal as any,
+      signal: controller.signal as unknown as RequestInit["signal"],
     });
 
     clearTimeout(killswitch);
@@ -41,13 +41,13 @@ async function main() {
     } else {
       console.log(`⚠️  UNEXPECTED: Got status ${res.status}. Review handler logic.`);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     clearTimeout(killswitch);
     const elapsed = Date.now() - start;
-    if (err.name === "AbortError") {
+    if (err instanceof Error && err.name === "AbortError") {
       console.log(`❌ FAIL: Test aborted after ${elapsed}ms — server hung.`);
     } else {
-      console.log(`⚠️  Error: ${err.message} after ${elapsed}ms`);
+      console.log(`⚠️  Error: ${err instanceof Error ? err.message : String(err)} after ${elapsed}ms`);
     }
   }
 }
