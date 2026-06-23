@@ -46,7 +46,8 @@ export const MODELS = {
 
 export const AI_PROVIDER = provider;
 
-// Rate-limit safe retry wrapper — critical for NVIDIA NIM 40 RPM free tier
+// Retry wrapper — handles both 429 rate-limits AND request aborts/timeouts
+// Critical for NVIDIA NIM free tier (40 RPM) and Vercel edge network latency
 export async function withRetry<T>(
   fn: () => Promise<T>,
   maxRetries = 3,
@@ -56,10 +57,21 @@ export async function withRetry<T>(
     try {
       return await fn();
     } catch (err: unknown) {
-      const isRateLimit = err && typeof err === "object" && ("status" in err && err.status === 429 || ("message" in err && typeof err.message === "string" && err.message.includes("429")));
-      if (isRateLimit && attempt < maxRetries) {
-        const delay = baseDelayMs * Math.pow(2, attempt);
-        console.warn(`[AI] Rate limited. Retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+      const errObj = err && typeof err === "object" ? err as Record<string, unknown> : null;
+      const message = errObj && typeof errObj.message === "string" ? errObj.message : "";
+      const status = errObj && typeof errObj.status === "number" ? errObj.status : 0;
+
+      const isRateLimit = status === 429 || message.includes("429");
+      const isAbort = message.includes("aborted") || message.includes("abort") || message.includes("timeout") || message.includes("ETIMEDOUT") || message.includes("ECONNRESET");
+      const isServerError = status >= 500 && status < 600;
+      const isRetryable = isRateLimit || isAbort || isServerError;
+
+      if (isRetryable && attempt < maxRetries) {
+        // Longer backoff for rate limits, shorter for transient failures
+        const multiplier = isRateLimit ? 2 : 1.5;
+        const delay = baseDelayMs * Math.pow(multiplier, attempt);
+        const reason = isRateLimit ? "Rate limited" : isAbort ? "Request aborted/timeout" : `Server error (${status})`;
+        console.warn(`[AI] ${reason}. Retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
         await new Promise((res) => setTimeout(res, delay));
         continue;
       }
@@ -136,7 +148,7 @@ IMPORTANT: You must respond with valid JSON only. No markdown, no code fences, n
       // this param gracefully if unsupported, so safe to include
       response_format: { type: "json_object" },
       temperature: 0.1, // low temp for deterministic structured output
-    }, { signal: AbortSignal.timeout(45000) })
+    }, { signal: AbortSignal.timeout(60000) })
   );
 
   const raw = sanitizeAiOutput(res.choices[0]?.message?.content ?? "");
@@ -164,7 +176,7 @@ export async function chat(prompt: string, model: string = MODELS.smart): Promis
     aiClient.chat.completions.create({
       model,
       messages: [{ role: "user", content: prompt }],
-    }, { signal: AbortSignal.timeout(45000) })
+    }, { signal: AbortSignal.timeout(60000) })
   );
   const raw = res.choices[0]?.message?.content ?? "";
   return { text: sanitizeAiOutput(raw) };

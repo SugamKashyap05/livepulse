@@ -995,6 +995,11 @@ async function runAiBatch(params: Record<string, unknown>, jobId?: string) {
         )
       }
     }
+
+    // Pace requests to stay under NVIDIA NIM 40 RPM ceiling
+    if (articles.indexOf(article) < articles.length - 1) {
+      await new Promise((r) => setTimeout(r, 1500))
+    }
   }
 
   return { success: true, processed, failed, total: articles.length, task, topic }
