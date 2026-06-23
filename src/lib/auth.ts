@@ -3,7 +3,9 @@ import { jwtVerify } from "jose"
 import { cookies } from "next/headers"
 
 const baseUrl = process.env.NEON_AUTH_BASE_URL
-const cookieSecret = process.env.NEON_AUTH_COOKIE_SECRET
+const rawCookieSecret = process.env.NEON_AUTH_COOKIE_SECRET
+const isValidSecret = rawCookieSecret && rawCookieSecret.length >= 32
+const cookieSecret = isValidSecret ? rawCookieSecret : "development-neon-auth-cookie-secret-32"
 const sessionDataCookieName = "__Secure-neon-auth.local.session_data"
 
 type CachedNeonUser = {
@@ -13,7 +15,7 @@ type CachedNeonUser = {
 }
 
 export function isNeonAuthConfigured() {
-  return Boolean(baseUrl && cookieSecret && cookieSecret.length >= 32)
+  return Boolean(baseUrl && isValidSecret)
 }
 
 export const auth = createNeonAuth({
