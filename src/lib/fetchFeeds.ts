@@ -226,7 +226,7 @@ export async function fetchFeedsWithStatus(sources: SourceInput[]): Promise<{
 }> {
   const results = await mapWithConcurrency(
     sources,
-    4,
+    20,
     (source) => fetchSingleFeedResult(source)
   )
 

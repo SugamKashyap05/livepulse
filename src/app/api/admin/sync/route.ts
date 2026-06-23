@@ -79,44 +79,51 @@ export async function POST(request: Request) {
     let saved = 0
     let skipped = 0
 
-    for (const article of articles) {
-      try {
-        let pubDate: Date
-        try {
-          pubDate = new Date(article.pubDate)
-          if (isNaN(pubDate.getTime())) pubDate = new Date()
-        } catch {
-          pubDate = new Date()
-        }
+    // Parallelize DB upserts in chunks of 20 to prevent Vercel function timeout
+    const chunkSize = 20;
+    for (let i = 0; i < articles.length; i += chunkSize) {
+      const chunk = articles.slice(i, i + chunkSize);
+      await Promise.all(
+        chunk.map(async (article) => {
+          try {
+            let pubDate: Date
+            try {
+              pubDate = new Date(article.pubDate)
+              if (isNaN(pubDate.getTime())) pubDate = new Date()
+            } catch {
+              pubDate = new Date()
+            }
 
-        await prisma.newsArticle.upsert({
-          where: { link: article.link },
-          update: {
-            title: article.title,
-            description: article.description || null,
-            image: article.image || null,
-            fetchedAt: new Date(),
-            slug: slugMap[article.source] || article.topic.toLowerCase(),
-            source: article.source,
-            topic: article.topic.toLowerCase(),
-          },
-          create: {
-            id: article.id,
-            title: article.title,
-            description: article.description || null,
-            link: article.link,
-            pubDate,
-            source: article.source,
-            topic: article.topic.toLowerCase(),
-            slug: slugMap[article.source] || article.topic.toLowerCase(),
-            image: article.image || null,
-          },
+            await prisma.newsArticle.upsert({
+              where: { link: article.link },
+              update: {
+                title: article.title,
+                description: article.description || null,
+                image: article.image || null,
+                fetchedAt: new Date(),
+                slug: slugMap[article.source] || article.topic.toLowerCase(),
+                source: article.source,
+                topic: article.topic.toLowerCase(),
+              },
+              create: {
+                id: article.id,
+                title: article.title,
+                description: article.description || null,
+                link: article.link,
+                pubDate,
+                source: article.source,
+                topic: article.topic.toLowerCase(),
+                slug: slugMap[article.source] || article.topic.toLowerCase(),
+                image: article.image || null,
+              },
+            })
+            saved++
+          } catch (error) {
+            console.error("[LivePulse] Error saving article:", article.title, error)
+            skipped++
+          }
         })
-        saved++
-      } catch (error) {
-        console.error("[LivePulse] Error saving article:", article.title, error)
-        skipped++
-      }
+      );
     }
 
     if (successNames.length > 0) {

@@ -42,60 +42,139 @@ export function AuthGateModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={handleBackdropClick}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--overlay)',
+        backdropFilter: 'blur(4px)',
+        padding: '20px',
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="auth-gate-headline"
     >
       <div
         ref={dialogRef}
-        className="relative w-full max-w-md mx-4 bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl p-8 flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200"
+        style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth: 400,
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          boxShadow: 'var(--shadow-lg)',
+          padding: '32px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 20,
+          fontFamily: 'var(--font-mono)',
+        }}
       >
         {/* Close button */}
         <button
           onClick={closeAuthGate}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+          style={{
+            position: 'absolute',
+            top: 16,
+            right: 16,
+            color: 'var(--muted)',
+            background: 'none',
+            border: 'none',
+            fontSize: 16,
+            cursor: 'pointer',
+          }}
           aria-label="Close"
+          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text)'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--muted)'}
         >
           ✕
         </button>
 
         {/* Icon + headline */}
-        <div className="flex flex-col items-center text-center gap-3">
-          <span className="text-5xl">{copy.icon}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12 }}>
+          <span style={{ fontSize: 40 }}>{copy.icon}</span>
           <h2
             id="auth-gate-headline"
-            className="text-xl font-semibold text-zinc-900 dark:text-white leading-tight"
+            style={{
+              fontSize: 18,
+              fontWeight: 500,
+              fontFamily: 'var(--font-display)',
+              color: 'var(--text)',
+              margin: 0,
+              lineHeight: 1.3,
+            }}
           >
             {copy.headline}
           </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p style={{
+            fontSize: 13,
+            color: 'var(--muted)',
+            margin: 0,
+            lineHeight: 1.5,
+          }}>
             {copy.detail}
           </p>
         </div>
 
         {/* Divider */}
-        <div className="border-t border-zinc-100 dark:border-zinc-800" />
+        <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
 
         {/* CTAs */}
-        <div className="flex flex-col gap-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <button
             onClick={() => { closeAuthGate(); router.push('/auth/signin'); }}
-            className="w-full py-3 px-4 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl font-medium text-sm hover:opacity-90 transition-opacity"
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              background: 'var(--text)',
+              color: 'var(--bg)',
+              border: 'none',
+              borderRadius: 4,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'opacity 0.2s ease',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           >
             Sign in
           </button>
           <button
             onClick={() => { closeAuthGate(); router.push('/auth/signup'); }}
-            className="w-full py-3 px-4 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl font-medium text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              background: 'transparent',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
+              borderRadius: 4,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'background 0.2s ease',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
             Create a free account
           </button>
         </div>
 
         {/* Fine print */}
-        <p className="text-center text-xs text-zinc-400">
+        <p style={{
+          textAlign: 'center',
+          fontSize: 11,
+          color: 'var(--muted)',
+          margin: '4px 0 0',
+        }}>
           Free accounts include access to AI chat, summaries, and your daily digest.
         </p>
       </div>
