@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server"
 import { isAdminAuthorized } from "@/lib/adminAuth"
 import { auth, isNeonAuthConfigured } from "@/lib/auth"
 
-export default function proxy(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   if (
@@ -28,7 +28,7 @@ export default function proxy(request: NextRequest) {
     return auth.middleware({ loginUrl: "/login" })(request)
   }
 
-  if (!isAdminAuthorized(request)) {
+  if (!(await isAdminAuthorized(request))) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
