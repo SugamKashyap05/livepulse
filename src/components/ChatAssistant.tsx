@@ -8,11 +8,19 @@ import { useAuthGate, useSession } from "@/context/AuthGateContext"
 interface Message {
   role: "user" | "assistant"
   content: string
+  lowConfidence?: boolean
+  warning?: string
 }
 
 type StreamEvent = {
   type?: string
   content?: string
+  lowConfidence?: boolean
+  warning?: string
+  contextStats?: {
+    lowConfidence?: boolean
+    warning?: string
+  }
 }
 
 function canUseHover() {
@@ -246,6 +254,13 @@ export default function ChatAssistant() {
                 {
                   role: "assistant",
                   content: finalContent || "No response available.",
+                  lowConfidence:
+                    event.lowConfidence === true ||
+                    event.contextStats?.lowConfidence === true,
+                  warning:
+                    event.warning ||
+                    event.contextStats?.warning ||
+                    "Limited sources available. This answer may be incomplete.",
                 },
               ])
             }
@@ -342,6 +357,12 @@ export default function ChatAssistant() {
                 {message.role === "assistant"
                   ? formatReadableAIResponse(message.content)
                   : message.content}
+                {message.role === "assistant" && message.lowConfidence && (
+                  <div style={warningBadgeStyle}>
+                    <span>!</span>
+                    <span>{message.warning}</span>
+                  </div>
+                )}
               </div>
             ))}
             {isThinking && (
@@ -644,4 +665,15 @@ const formattedParagraphStyle: CSSProperties = {
   fontSize: 14,
   lineHeight: 1.7,
   margin: "4px 0",
+}
+
+const warningBadgeStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  marginTop: 8,
+  color: "#f5c542",
+  fontFamily: "var(--font-mono)",
+  fontSize: 10,
+  lineHeight: 1.4,
 }

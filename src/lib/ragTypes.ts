@@ -53,6 +53,8 @@ export interface Citation {
 export interface ConstrainedResponse {
   answer: { text: string; citations: Citation[] } | null;
   insufficientEvidence: boolean;
+  lowConfidence?: boolean;
+  warning?: string;
   reason?: string;
   chunks: ScoredChunk[];
   avgConfidence?: number;

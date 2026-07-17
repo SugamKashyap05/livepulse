@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { prisma } from '@/lib/db';
 import { hybridSearch } from './ragSearch';
-import { scoreChunks, filterTrustedChunks, averageConfidence } from './ragScoring';
+import { scoreChunks, filterTrustedChunks, averageConfidence, getCachedConfidenceThreshold } from './ragScoring';
 import type { ScoredChunk } from './ragTypes';
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -33,7 +33,8 @@ export async function cachedHybridSearch(
 
   // Cache miss or expired
   const hybridResults = await hybridSearch(query, limit);
-  const scored = scoreChunks(hybridResults);
+  const threshold = await getCachedConfidenceThreshold();
+  const scored = scoreChunks(hybridResults, threshold);
   const trusted = filterTrustedChunks(scored);
   const avgConf = averageConfidence(trusted);
 

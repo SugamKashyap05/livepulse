@@ -19,9 +19,10 @@ import { prisma } from "@/lib/db"
 import { getRagStatus } from "@/lib/rag"
 import { queueDigestGeneration, queueDigestRegeneration } from "@/app/admin/ai-manager/digest/actions"
 import { queueVerificationCycle, queueReanalyseDrafts, dismissAllWarnings } from "@/app/admin/ai-manager/verification/actions"
-import { queueReindexMissing, queueReindexRecent, queueReindexAll, runTestQuery } from "@/app/admin/ai-manager/research/actions"
+import { queueReindexMissing, queueReindexRecent, queueReindexAll, runTestQuery, updateConfidenceThreshold } from "@/app/admin/ai-manager/research/actions"
 import { queueScoutCycle, queueGenerateDrafts } from "@/app/admin/ai-manager/reporting/actions"
-import { queueNewsroomCycle, queueAiBatch, queueRagReindex, queueDigestGeneration as assignmentDigest } from "@/app/admin/ai-manager/assignment/actions"
+import { queueNewsroomCycle, queueAiBatch, queueRagReindex, queueDigestGeneration as assignmentDigest, purgeExpiredCache } from "@/app/admin/ai-manager/assignment/actions"
+import { getConfidenceThreshold } from "@/lib/ragScoring"
 
 export const dynamic = "force-dynamic"
 
@@ -276,7 +277,7 @@ async function getRoomMetrics(department: AdminDepartmentId): Promise<Metric[]> 
 
 async function getResearchLibraryData() {
   const rag = await getRagStatus()
-  const [topicRows, indexEvents] = await Promise.all([
+  const [topicRows, indexEvents, confidenceThreshold] = await Promise.all([
     prisma.$queryRaw<ResearchTopicCoverageRow[]>`
       SELECT
         a."topic",
@@ -296,6 +297,7 @@ async function getResearchLibraryData() {
       orderBy: { createdAt: "desc" },
       take: 8,
     }),
+    getConfidenceThreshold(),
   ])
 
   return {
@@ -306,6 +308,7 @@ async function getResearchLibraryData() {
       lastIndexedAt: rag.lastIndexed,
       modelStatus: rag.lastError ? `Error: ${rag.lastError}` : rag.embeddingModel,
     },
+    confidenceThreshold,
     topicCoverageRows: topicRows.map((row) => {
       const total = Number(row.totalArticles)
       const indexed = Number(row.indexedArticles)
@@ -1049,6 +1052,7 @@ export default async function DepartmentPage({
           onRunAiBatch={queueAiBatch}
           onRunRagReindex={queueRagReindex}
           onGenerateDigest={assignmentDigest}
+          onPurgeExpiredCache={purgeExpiredCache}
         />
       )}
       {department.id === "fetch_news" && fetchNewsData && (
@@ -1100,6 +1104,8 @@ export default async function DepartmentPage({
           onReindexRecent={queueReindexRecent}
           onReindexAll={queueReindexAll}
           onTestQuery={runTestQuery}
+          onUpdateConfidenceThreshold={updateConfidenceThreshold}
+          currentConfidenceThreshold={researchData.confidenceThreshold}
         />
       )}
       {department.id === "digest" && digestData && (

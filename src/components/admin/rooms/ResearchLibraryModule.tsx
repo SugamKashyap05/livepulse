@@ -2,7 +2,7 @@
 "use client"
 
 import type { CSSProperties, FormEvent } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 
 export type ResearchLibraryCoverageMetrics = {
   totalArticles: number
@@ -53,6 +53,8 @@ export type ResearchLibraryModuleProps = {
   onReindexRecent?: () => void | Promise<void>
   onReindexAll?: () => void | Promise<void>
   onTestQuery?: (query: string) => ResearchLibraryTestResult | void | Promise<ResearchLibraryTestResult | void>
+  onUpdateConfidenceThreshold?: (value: number) => void | Promise<void>
+  currentConfidenceThreshold?: number
   onRefresh?: () => void | Promise<void>
   reindexEndpoint?: string
   testQueryEndpoint?: string
@@ -73,6 +75,8 @@ export default function ResearchLibraryModule({
   onReindexRecent,
   onReindexAll,
   onTestQuery,
+  onUpdateConfidenceThreshold,
+  currentConfidenceThreshold = 0.45,
   onRefresh,
   reindexEndpoint = "/api/admin/rag/reindex",
   testQueryEndpoint = "/api/admin/rag/query",
@@ -81,6 +85,9 @@ export default function ResearchLibraryModule({
   const [notice, setNotice] = useState<Notice>(null)
   const [query, setQuery] = useState("")
   const [testResult, setTestResult] = useState<ResearchLibraryTestResult | null>(null)
+  const [thresholdValue, setThresholdValue] = useState(currentConfidenceThreshold.toString())
+  const [thresholdSaved, setThresholdSaved] = useState(false)
+  const [thresholdPending, startThresholdTransition] = useTransition()
   const [prevIndexEvents, setPrevIndexEvents] = useState(indexEvents)
   const [events, setEvents] = useState(indexEvents)
   if (indexEvents !== prevIndexEvents) {
@@ -157,6 +164,29 @@ export default function ResearchLibraryModule({
     }
   }
 
+  function saveThreshold() {
+    if (!onUpdateConfidenceThreshold) return
+
+    const parsed = Number.parseFloat(thresholdValue)
+    if (!Number.isFinite(parsed) || parsed < 0.1 || parsed > 0.9) {
+      setNotice({ tone: "bad", text: "Threshold must be between 0.1 and 0.9." })
+      return
+    }
+
+    startThresholdTransition(async () => {
+      setNotice(null)
+      try {
+        await onUpdateConfidenceThreshold(parsed)
+        setThresholdSaved(true)
+        setNotice({ tone: "good", text: "Confidence threshold saved." })
+        await onRefresh?.()
+      } catch (error) {
+        setThresholdSaved(false)
+        setNotice({ tone: "bad", text: error instanceof Error ? error.message : "Threshold update failed." })
+      }
+    })
+  }
+
   return (
     <section style={shellStyle}>
       {notice && (
@@ -198,6 +228,43 @@ export default function ResearchLibraryModule({
           )}
         </div>
       </div>
+
+      <section style={panelStyle}>
+        <div style={panelHeaderStyle}>
+          <span>CONFIDENCE THRESHOLD</span>
+          <span>{thresholdPending ? "SAVING" : "CONFIG"}</span>
+        </div>
+        <div style={thresholdConfigStyle}>
+          <div>
+            <p style={descriptionStyle}>
+              Minimum score for a chunk to be trusted. Changes take effect within 5 minutes.
+            </p>
+          </div>
+          <div style={thresholdControlsStyle}>
+            <input
+              type="number"
+              min="0.1"
+              max="0.9"
+              step="0.05"
+              value={thresholdValue}
+              onChange={(event) => {
+                setThresholdValue(event.target.value)
+                setThresholdSaved(false)
+              }}
+              disabled={thresholdPending}
+              style={thresholdInputStyle}
+            />
+            <button
+              type="button"
+              disabled={thresholdPending || !onUpdateConfidenceThreshold}
+              onClick={saveThreshold}
+              style={buttonStateStyle(primaryButtonStyle, thresholdPending || !onUpdateConfidenceThreshold, thresholdPending)}
+            >
+              {thresholdPending ? "SAVING..." : thresholdSaved ? "SAVED" : "SAVE"}
+            </button>
+          </div>
+        </div>
+      </section>
 
       <div style={mainGridStyle}>
         <section style={panelStyle}>
@@ -692,6 +759,25 @@ const resultMetaStyle: CSSProperties = {
   color: "var(--accent)",
   fontFamily: "var(--font-mono)",
   fontSize: 9,
+}
+
+const thresholdConfigStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+}
+
+const thresholdControlsStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+}
+
+const thresholdInputStyle: CSSProperties = {
+  ...inputStyle,
+  width: 96,
 }
 
 const citationGridStyle: CSSProperties = {

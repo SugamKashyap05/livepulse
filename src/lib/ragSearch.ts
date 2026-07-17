@@ -51,7 +51,7 @@ function reciprocalRankFusion(
   k = 60
 ): HybridResult[] {
   const scores = new Map<string, number>();
-  const articles = new Map<string, SemanticResult | BM25Result>();
+  const articles = new Map<string, Omit<HybridResult, 'rrfScore'>>();
 
   semantic.forEach((r, rank) => {
     scores.set(r.id, (scores.get(r.id) ?? 0) + 1 / (k + rank + 1));
@@ -60,7 +60,12 @@ function reciprocalRankFusion(
 
   bm25.forEach((r, rank) => {
     scores.set(r.id, (scores.get(r.id) ?? 0) + 1 / (k + rank + 1));
-    if (!articles.has(r.id)) articles.set(r.id, { ...r });
+    const existing = articles.get(r.id);
+    if (existing) {
+      articles.set(r.id, { ...existing, bm25Score: r.bm25Score });
+    } else {
+      articles.set(r.id, { ...r });
+    }
   });
 
   return Array.from(scores.entries())
@@ -76,6 +81,8 @@ function reciprocalRankFusion(
         publishedAt: article.publishedAt,
         ingestedAt: article.ingestedAt,
         link: article.link,
+        semanticScore: article.semanticScore,
+        bm25Score: article.bm25Score,
         rrfScore,
       };
     });

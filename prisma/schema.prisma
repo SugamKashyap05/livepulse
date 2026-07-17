@@ -546,3 +546,10 @@ model RagQueryCache {
   expiresAt     DateTime
   hitCount      Int      @default(0)
 }
+
+model AdminConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}

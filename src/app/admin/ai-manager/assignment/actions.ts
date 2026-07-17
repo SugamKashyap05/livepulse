@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/db"
-import { validateAdminSession } from "@/lib/adminSessions"
 import { isAdminAuthorized } from "@/lib/adminAuth"
+import { purgeExpiredRagCacheEntries } from "@/lib/ragCacheCleanup"
 
 export async function queueNewsroomCycle() {
   if (!(await isAdminAuthorized())) throw new Error("Unauthorized")
@@ -60,6 +60,25 @@ export async function queueDigestGeneration() {
       status: "queued",
       title: "Generate digest",
       params: { regen: true },
+    },
+  })
+
+  revalidatePath("/admin/ai-manager/assignment")
+}
+
+export async function purgeExpiredCache() {
+  if (!(await isAdminAuthorized())) throw new Error("Unauthorized")
+
+  const count = await purgeExpiredRagCacheEntries()
+
+  await prisma.adminDepartmentEvent.create({
+    data: {
+      department: "assignment",
+      type: "CACHE_PURGED",
+      title: "RAG cache purged",
+      body: `Purged ${count} expired cache entries`,
+      status: "resolved",
+      severity: "info",
     },
   })
 

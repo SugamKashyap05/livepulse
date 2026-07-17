@@ -36,12 +36,13 @@ export type AssignmentDeskModuleProps = {
   onRunAiBatch?: () => void | Promise<void>
   onRunRagReindex?: () => void | Promise<void>
   onGenerateDigest?: () => void | Promise<void>
+  onPurgeExpiredCache?: () => void | Promise<void>
   onRefresh?: () => void | Promise<void>
   jobEndpoint?: string
   jobPayloads?: Partial<Record<DeskAction, Record<string, unknown>>>
 }
 
-type DeskAction = "newsroom-cycle" | "ai-batch" | "rag-reindex" | "digest"
+type DeskAction = "newsroom-cycle" | "ai-batch" | "rag-reindex" | "digest" | "cache-purge"
 
 type Notice = {
   tone: "good" | "warn" | "bad"
@@ -57,6 +58,7 @@ export default function AssignmentDeskModule({
   onRunAiBatch,
   onRunRagReindex,
   onGenerateDigest,
+  onPurgeExpiredCache,
   onRefresh,
   jobEndpoint = "/api/admin/ai/jobs",
   jobPayloads,
@@ -116,7 +118,8 @@ export default function AssignmentDeskModule({
     if (action === "newsroom-cycle") return onRunNewsroomCycle
     if (action === "ai-batch") return onRunAiBatch
     if (action === "rag-reindex") return onRunRagReindex
-    return onGenerateDigest
+    if (action === "digest") return onGenerateDigest
+    return onPurgeExpiredCache
   }
 
   return (
@@ -147,6 +150,7 @@ export default function AssignmentDeskModule({
           <ActionButton label="AI BATCH" loading={working === "ai-batch"} disabled={working !== null} onClick={() => runAction("ai-batch")} variant="secondary" />
           <ActionButton label="RAG REINDEX" loading={working === "rag-reindex"} disabled={working !== null} onClick={() => runAction("rag-reindex")} variant="secondary" />
           <ActionButton label="GENERATE DIGEST" loading={working === "digest"} disabled={working !== null} onClick={() => runAction("digest")} variant="secondary" />
+          <ActionButton label="PURGE CACHE" loading={working === "cache-purge"} disabled={working !== null} onClick={() => runAction("cache-purge")} variant="secondary" />
         </div>
       </div>
 
@@ -214,6 +218,9 @@ function payloadForAction(action: DeskAction) {
   if (action === "rag-reindex") {
     return { type: "rag_reindex", title: "Reindex RAG", params: { mode: "missing", limit: 50 } }
   }
+  if (action === "cache-purge") {
+    return { type: "cache_purge", title: "Purge expired RAG cache", params: {} }
+  }
   return { type: "digest_generate", title: "Generate digest", params: { regen: true } }
 }
 
@@ -270,7 +277,8 @@ function labelForAction(action: DeskAction) {
   if (action === "newsroom-cycle") return "Newsroom cycle"
   if (action === "ai-batch") return "AI batch"
   if (action === "rag-reindex") return "RAG reindex"
-  return "Digest generation"
+  if (action === "digest") return "Digest generation"
+  return "Cache purge"
 }
 
 function statusColor(status: string) {

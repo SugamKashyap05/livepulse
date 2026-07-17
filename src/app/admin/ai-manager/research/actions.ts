@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/db"
-import { validateAdminSession } from "@/lib/adminSessions"
 import { isAdminAuthorized } from "@/lib/adminAuth"
+import { clearConfidenceThresholdCache } from "@/lib/ragScoring"
 
 export async function queueReindexMissing() {
   if (!(await isAdminAuthorized())) throw new Error("Unauthorized")
@@ -75,4 +75,21 @@ export async function runTestQuery(query: string) {
   } catch (error: any) {
     throw new Error(error.message || "Test query failed")
   }
+}
+
+export async function updateConfidenceThreshold(value: number) {
+  if (!(await isAdminAuthorized())) throw new Error("Unauthorized")
+
+  if (!Number.isFinite(value) || value < 0.1 || value > 0.9) {
+    throw new Error("Threshold must be between 0.1 and 0.9")
+  }
+
+  await prisma.adminConfig.upsert({
+    where: { key: "RAG_CONFIDENCE_THRESHOLD" },
+    update: { value: value.toString() },
+    create: { key: "RAG_CONFIDENCE_THRESHOLD", value: value.toString() },
+  })
+
+  clearConfidenceThresholdCache()
+  revalidatePath("/admin/ai-manager/research")
 }

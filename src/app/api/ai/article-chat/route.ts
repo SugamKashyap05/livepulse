@@ -10,12 +10,9 @@ import {
   AI_PROVIDER,
 } from "@/lib/ollama"
 import {
-  buildRetrievedContext,
   extractCitedSources,
-  searchRagContext,
 } from "@/lib/rag"
-import { hybridSearch } from "@/lib/ragSearch"
-import { scoreChunks, filterTrustedChunks, averageConfidence, CONFIDENCE_THRESHOLD } from "@/lib/ragScoring"
+import { getCachedConfidenceThreshold } from "@/lib/ragScoring"
 import { cachedHybridSearch } from "@/lib/ragCache"
 import type { Citation } from "@/lib/ragTypes"
 
@@ -160,6 +157,7 @@ export async function POST(request: Request) {
     let citations: Citation[] = []
     let insufficientEvidence = false
     let avgConf = 0
+    const confidenceThreshold = await getCachedConfidenceThreshold()
 
     try {
       const cacheResult = await cachedHybridSearch(ragQuery, 20)
@@ -183,7 +181,7 @@ export async function POST(request: Request) {
         }
       }).catch(() => {})
 
-      if (hybridResults.length === 0 || avgConf < CONFIDENCE_THRESHOLD) {
+      if (hybridResults.length === 0 || avgConf < confidenceThreshold) {
         insufficientEvidence = true
       } else {
         citations = hybridResults.map((c, i) => ({
