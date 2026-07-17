@@ -1,7 +1,9 @@
+import type { ChatIntent } from "./intent-classifier";
+
 interface ConfidenceLog {
   articleId: string | null;
   question: string;
-  intent: "meta" | "factual" | "ambiguous";
+  intent: ChatIntent;
   avgConf: number;
   threshold: number;
   chunkCount: number;

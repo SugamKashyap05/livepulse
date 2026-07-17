@@ -126,7 +126,7 @@ describe("POST /api/ai/article-chat", () => {
       id: "123", title: "Test Article", summary: "Test summary", topic: "test"
     } as any)
     vi.mocked(cachedHybridSearch).mockResolvedValue({
-      trusted: [{ id: "chunk1", title: "Chunk 1", content: "details", confidence: { sourceQualityScore: 0.9 } }],
+      trusted: [{ id: "chunk1", title: "Chunk 1", content: "details", confidence: { sourceQualityScore: 0.9 } } as any],
       avgConf: 0.9,
       cached: false
     })
@@ -206,9 +206,9 @@ describe("POST /api/ai/article-chat", () => {
     })
 
     // To simulate the LLM soft refusing because it lacks description/summary, we mock ollamaChatStream to return the refusal
-    vi.mocked(ollamaChatStream).mockImplementation(async function* () {
+    vi.mocked(ollamaChatStream).mockImplementation((async function* () {
       yield { choices: [{ delta: { content: "I cannot answer this based on the provided context." } }] }
-    })
+    }) as any)
 
     const req = createRequest({ articleId: "123", messages: [{ role: "user", content: "summarize this article" }] })
     const res = await POST(req)
