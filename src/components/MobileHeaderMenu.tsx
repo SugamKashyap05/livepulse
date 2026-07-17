@@ -3,6 +3,7 @@
 import Link from "next/link"
 import type { ReactNode } from "react"
 import { useEffect, useRef, useState } from "react"
+import { usePathname } from "next/navigation"
 
 const mobileLinkStyle = {
   display: "block",
@@ -23,6 +24,11 @@ export default function MobileHeaderMenu({
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const pathname = usePathname()
+
+  useEffect(() => {
+    setIsMenuOpen(false)
+  }, [pathname])
 
   useEffect(() => {
     if (!isMenuOpen) return
@@ -102,9 +108,6 @@ export default function MobileHeaderMenu({
             <Link
               key={item.href}
               href={item.href}
-              onClick={() => {
-                setTimeout(() => setIsMenuOpen(false), 50)
-              }}
               style={mobileLinkStyle}
             >
               {item.label}

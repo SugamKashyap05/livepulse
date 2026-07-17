@@ -57,6 +57,11 @@ const nextConfig: NextConfig = {
   ],
   reactCompiler: true,
   experimental: {},
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '**' },
+    ],
+  },
   async headers() {
     if (process.env.NODE_ENV === "development") {
       return []

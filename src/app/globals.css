@@ -70,6 +70,10 @@ html {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   height: -webkit-fill-available;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  position: relative;
 }
 
 body {
@@ -78,7 +82,15 @@ body {
   font-family: var(--font-mono);
   min-height: 100dvh;
   min-height: -webkit-fill-available;
+  width: 100%;
+  max-width: 100%;
   overflow-x: hidden;
+  position: relative;
+}
+
+main {
+  width: 100%;
+  min-width: 0;
 }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -224,7 +236,7 @@ iframe[src*="neon"] {
   }
 
   .public-header-top {
-    padding: 6px 16px !important;
+    display: none !important;
   }
 
   .public-header-date {
@@ -281,6 +293,12 @@ iframe[src*="neon"] {
     min-height: auto !important;
   }
 
+  .news-card:active {
+    transform: scale(0.98) !important;
+    opacity: 0.85 !important;
+    transition: transform 0.1s ease, opacity 0.1s ease !important;
+  }
+
   .news-card:hover {
     transform: none !important;
     box-shadow: none !important;
@@ -314,6 +332,10 @@ iframe[src*="neon"] {
     opacity: 1 !important;
     visibility: visible !important;
     pointer-events: auto !important;
+  }
+
+  .card-feedback-row:not(.show-on-mobile) {
+    display: none !important;
   }
 
   .card-footer {

@@ -68,7 +68,7 @@ function normalizeSourceInput(body: Record<string, unknown>) {
 }
 
 export async function GET(request: Request) {
-  if (!isAdminAuthorized(request)) return unauthorized()
+  if (!(await isAdminAuthorized(request))) return unauthorized()
 
   const sources = await prisma.feedSource.findMany({
     orderBy: [{ topic: "asc" }, { priority: "desc" }, { name: "asc" }],
@@ -78,7 +78,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!isAdminAuthorized(request)) return unauthorized()
+  if (!(await isAdminAuthorized(request))) return unauthorized()
 
   const body = await request.json()
   const normalized = normalizeSourceInput(body)
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!isAdminAuthorized(request)) return unauthorized()
+  if (!(await isAdminAuthorized(request))) return unauthorized()
 
   const body = await request.json()
   const id = String(body.id || "")
@@ -163,7 +163,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!isAdminAuthorized(request)) return unauthorized()
+  if (!(await isAdminAuthorized(request))) return unauthorized()
 
   const { id } = await request.json()
   if (!id) {

@@ -132,7 +132,7 @@ export async function GET() {
 }
 
 export async function DELETE(request: Request) {
-  if (!isAdminAuthorized(request)) {
+  if (!(await isAdminAuthorized(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

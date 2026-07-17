@@ -300,14 +300,6 @@ export default function ChatAssistant() {
         className="chat-launcher"
         onClick={handleLauncherClick}
         style={floatingButtonStyle}
-        onMouseEnter={(event) => {
-          if (!canUseHover()) return
-          event.currentTarget.style.transform = "scale(1.1)"
-        }}
-        onMouseLeave={(event) => {
-          if (!canUseHover()) return
-          event.currentTarget.style.transform = "scale(1)"
-        }}
       >
         {isOpen ? "x" : "AI"}
       </button>
@@ -404,16 +396,6 @@ export default function ChatAssistant() {
                   opacity: sendDisabled ? 0.4 : 1,
                   cursor: sendDisabled ? "not-allowed" : "pointer",
                 }}
-                onMouseEnter={(event) => {
-                  if (!canUseHover()) return
-                  if (!event.currentTarget.disabled) {
-                    event.currentTarget.style.opacity = "0.85"
-                  }
-                }}
-                onMouseLeave={(event) => {
-                  if (!canUseHover()) return
-                  event.currentTarget.style.opacity = sendDisabled ? "0.4" : "1"
-                }}
               >
                 ASK
               </button>
@@ -431,6 +413,11 @@ export default function ChatAssistant() {
           to {
             opacity: 1;
             transform: translateY(0) scale(1);
+          }
+        }
+        @media (hover: hover) {
+          .chat-launcher:hover {
+            transform: scale(1.1) !important;
           }
         }
       `}</style>

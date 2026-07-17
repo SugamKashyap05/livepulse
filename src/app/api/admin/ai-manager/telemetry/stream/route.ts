@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db"
 export const dynamic = "force-dynamic"
 
 export async function GET(req: NextRequest) {
-  if (!isAdminAuthorized(req)) {
+  if (!(await isAdminAuthorized(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

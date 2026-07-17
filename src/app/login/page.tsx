@@ -85,6 +85,17 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <main className="auth-shell" style={authShellStyle}>
+      <Link href={next || "/"} style={{
+        position: "absolute",
+        top: 24,
+        left: 24,
+        fontFamily: "var(--font-mono)",
+        fontSize: 12,
+        color: "var(--muted)",
+        textDecoration: "none"
+      }}>
+        ← Back
+      </Link>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <Link href="/" style={wordmarkStyle}>
           LivePulse
@@ -126,7 +137,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
           {errorMessage && <div style={errorStyle}>{errorMessage}</div>}
 
-          <button type="submit" style={buttonStyle}>
+          <button type="submit" style={{ ...buttonStyle, marginTop: 24 }}>
             Sign in
           </button>
         </form>
@@ -162,6 +173,7 @@ const authShellStyle = {
       transparent 60%)
   `,
   padding: "32px 16px",
+  position: "relative",
 } as const
 
 const wordmarkStyle = {
@@ -176,11 +188,11 @@ const wordmarkStyle = {
 } as const
 
 const formCardStyle = {
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
+  background: "rgba(255, 255, 255, 0.02)",
+  border: "1px solid var(--border2)",
   borderRadius: 10,
   padding: "32px 28px",
-  boxShadow: "var(--shadow-lg)",
+  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
 } as const
 
 const labelStyle = {
@@ -195,7 +207,7 @@ const labelStyle = {
 
 const inputStyle = {
   width: "100%",
-  background: "var(--surface2)",
+  background: "rgba(0, 0, 0, 0.2)",
   border: "1px solid var(--border2)",
   borderRadius: 5,
   color: "var(--text)",

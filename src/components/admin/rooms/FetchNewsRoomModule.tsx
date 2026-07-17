@@ -1,7 +1,8 @@
 "use client"
 
 import type { CSSProperties } from "react"
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import { triggerManualSync, retrySource, toggleSource, addSource } from "@/app/admin/ai-manager/fetch-news/actions"
 
 export type FetchNewsSource = {
   id: string
@@ -106,18 +107,35 @@ export default function FetchNewsRoomModule({
             issues need cleanup before the newsroom cycle starts.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={runSync}
-          disabled={syncing}
-          style={{
-            ...primaryButtonStyle,
-            opacity: syncing ? 0.65 : 1,
-            cursor: syncing ? "wait" : "pointer",
-          }}
-        >
-          {syncing ? "SYNCING..." : "RUN NEWS SYNC"}
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <form action={async () => {
+            await triggerManualSync()
+          }}>
+            <button
+              type="submit"
+              disabled={syncing}
+              style={{
+                ...primaryButtonStyle,
+                opacity: syncing ? 0.65 : 1,
+                cursor: syncing ? "wait" : "pointer",
+              }}
+            >
+              QUEUE SYNC JOB
+            </button>
+          </form>
+          <button
+            type="button"
+            onClick={runSync}
+            disabled={syncing}
+            style={{
+              ...primaryButtonStyle,
+              opacity: syncing ? 0.65 : 1,
+              cursor: syncing ? "wait" : "pointer",
+            }}
+          >
+            {syncing ? "SYNCING NOW..." : "RUN SYNC (API)"}
+          </button>
+        </div>
       </header>
 
       <section style={metricGridStyle}>
@@ -152,14 +170,17 @@ export default function FetchNewsRoomModule({
 
         <article style={panelStyle}>
           <div style={panelHeaderStyle}>
-            <span>SUGGESTED NEXT MOVES</span>
-            <span>{data.recommendations.length}</span>
+            <span>ADD NEW SOURCE</span>
           </div>
-          <div style={listStyle}>
-            {data.recommendations.map((item) => (
-              <div key={item} style={suggestionStyle}>{item}</div>
-            ))}
-          </div>
+          <form action={addSource} style={{ display: "grid", gap: 8 }}>
+            <input name="name" placeholder="Source Name" required style={inputStyle} />
+            <input name="url" placeholder="RSS URL" required style={inputStyle} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input name="topic" placeholder="Topic" required style={inputStyle} />
+              <input name="intervalMinutes" placeholder="Interval (min)" type="number" defaultValue={30} style={inputStyle} />
+            </div>
+            <button type="submit" style={primaryButtonStyle}>ADD SOURCE</button>
+          </form>
         </article>
       </section>
 
@@ -242,15 +263,43 @@ function SourceList({
       </div>
       <div style={listStyle}>
         {sources.map((source) => (
-          <div key={source.id} style={sourceItemStyle}>
-            <strong>{source.name}</strong>
-            <span>{source.topic} / {source.enabled ? "enabled" : "disabled"} / {source.lastStatus ?? "new"}</span>
-            {source.lastErrorMessage && <em>{source.lastErrorMessage}</em>}
-          </div>
+          <SourceItem key={source.id} source={source} />
         ))}
         {sources.length === 0 && <div style={emptyStyle}>{empty}</div>}
       </div>
     </article>
+  )
+}
+
+function SourceItem({ source }: { source: FetchNewsSource }) {
+  const [pending, startTransition] = useTransition()
+
+  return (
+    <div style={sourceItemStyle}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <strong>{source.name}</strong>
+        <div style={{ display: "flex", gap: 6 }}>
+          {source.lastStatus === "error" && (
+            <button
+              disabled={pending}
+              onClick={() => startTransition(() => retrySource(source.id))}
+              style={actionButtonStyle}
+            >
+              {pending ? "..." : "Retry"}
+            </button>
+          )}
+          <button
+            disabled={pending}
+            onClick={() => startTransition(() => toggleSource(source.id, !source.enabled))}
+            style={actionButtonStyle}
+          >
+            {source.enabled ? "Disable" : "Enable"}
+          </button>
+        </div>
+      </div>
+      <span>{source.topic} / {source.enabled ? "enabled" : "disabled"} / {source.lastStatus ?? "new"}</span>
+      {source.lastErrorMessage && <em style={{ color: "var(--accent)" }}>{source.lastErrorMessage}</em>}
+    </div>
   )
 }
 
@@ -446,4 +495,27 @@ const emptyStyle: CSSProperties = {
   fontFamily: "var(--font-mono)",
   fontSize: 10,
   textAlign: "center",
+}
+
+const inputStyle: CSSProperties = {
+  padding: "8px 10px",
+  background: "var(--surface2)",
+  border: "1px solid var(--border)",
+  borderRadius: 4,
+  color: "var(--text)",
+  fontFamily: "var(--font-sans)",
+  fontSize: 12,
+  outline: "none",
+  width: "100%",
+}
+
+const actionButtonStyle: CSSProperties = {
+  padding: "4px 8px",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: 4,
+  color: "var(--text)",
+  fontFamily: "var(--font-mono)",
+  fontSize: 9,
+  cursor: "pointer",
 }

@@ -17,6 +17,11 @@ import {
 } from "@/lib/adminDepartments"
 import { prisma } from "@/lib/db"
 import { getRagStatus } from "@/lib/rag"
+import { queueDigestGeneration, queueDigestRegeneration } from "@/app/admin/ai-manager/digest/actions"
+import { queueVerificationCycle, queueReanalyseDrafts, dismissAllWarnings } from "@/app/admin/ai-manager/verification/actions"
+import { queueReindexMissing, queueReindexRecent, queueReindexAll, runTestQuery } from "@/app/admin/ai-manager/research/actions"
+import { queueScoutCycle, queueGenerateDrafts } from "@/app/admin/ai-manager/reporting/actions"
+import { queueNewsroomCycle, queueAiBatch, queueRagReindex, queueDigestGeneration as assignmentDigest } from "@/app/admin/ai-manager/assignment/actions"
 
 export const dynamic = "force-dynamic"
 
@@ -1040,6 +1045,10 @@ export default async function DepartmentPage({
           suggestedActions={assignmentData.suggestedActions}
           activeJobCount={assignmentData.activeJobCount}
           pendingJobCount={assignmentData.pendingJobCount}
+          onRunNewsroomCycle={queueNewsroomCycle}
+          onRunAiBatch={queueAiBatch}
+          onRunRagReindex={queueRagReindex}
+          onGenerateDigest={assignmentDigest}
         />
       )}
       {department.id === "fetch_news" && fetchNewsData && (
@@ -1052,6 +1061,8 @@ export default async function DepartmentPage({
           storyCandidates={reportingData.storyCandidates}
           coverageGaps={reportingData.coverageGaps}
           recentActivity={reportingData.recentActivity}
+          onRunScout={queueScoutCycle}
+          onGenerateDrafts={queueGenerateDrafts}
         />
       )}
       {department.id === "verification" && verificationData && (
@@ -1061,6 +1072,9 @@ export default async function DepartmentPage({
           failedVerificationJobs={verificationData.failedVerificationJobs}
           suspiciousDraftWarnings={verificationData.suspiciousDraftWarnings}
           duplicateSourceWarnings={verificationData.duplicateSourceWarnings}
+          onRunFactCheck={queueVerificationCycle}
+          onReanalyse={queueReanalyseDrafts}
+          onDismissWarnings={dismissAllWarnings}
         />
       )}
       {department.id === "copy_desk" && copyData && (
@@ -1082,6 +1096,10 @@ export default async function DepartmentPage({
           metrics={researchData.metrics}
           topicCoverageRows={researchData.topicCoverageRows}
           indexEvents={researchData.indexEvents}
+          onReindexMissing={queueReindexMissing}
+          onReindexRecent={queueReindexRecent}
+          onReindexAll={queueReindexAll}
+          onTestQuery={runTestQuery}
         />
       )}
       {department.id === "digest" && digestData && (
@@ -1090,18 +1108,8 @@ export default async function DepartmentPage({
           historyRows={digestData.historyRows}
           includedArticles={digestData.includedArticles}
           visibility={digestData.visibility}
-          generateEndpoint="/api/admin/ai/jobs"
-          regenerateEndpoint="/api/admin/ai/jobs"
-          generatePayload={{
-            type: "digest_generate",
-            title: "Generate digest",
-            params: { regen: false },
-          }}
-          regeneratePayload={{
-            type: "digest_generate",
-            title: "Regenerate digest",
-            params: { regen: true },
-          }}
+          onGenerate={queueDigestGeneration}
+          onRegenerate={queueDigestRegeneration}
         />
       )}
       {department.id === "operations" && operationsData && (

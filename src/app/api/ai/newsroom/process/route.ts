@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 300 // Long processing
 
 export async function POST(request: Request) {
-  if (!isAdminAuthorized(request)) {
+  if (!(await isAdminAuthorized(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

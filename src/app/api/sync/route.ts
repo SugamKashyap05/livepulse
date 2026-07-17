@@ -42,6 +42,7 @@ export async function GET(request: Request) {
         failCount: 0,
         lastErrorAt: null,
         lastErrorMessage: null,
+        retryCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       }))

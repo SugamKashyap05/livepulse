@@ -64,6 +64,7 @@ export default function NewsGrid({ articles, loading = false, feedContext }: New
           item={item}
           feedContext={feedContext}
           feedPosition={index}
+          priority={index === 0}
         />
       ))}
     </div>

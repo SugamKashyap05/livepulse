@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 const MAX_CONSECUTIVE_FEED_ERRORS = 5
 
 export async function POST(request: Request) {
-  if (!isAdminAuthorized(request)) {
+  if (!(await isAdminAuthorized(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
         fetchIntervalMinutes: 30,
         lastErrorAt: null,
         lastErrorMessage: null,
+        retryCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       }))

@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { formatDistanceToNow } from "date-fns"
+import Image from "next/image"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import ArticleDwellTracker from "@/components/ArticleDwellTracker"
@@ -144,16 +145,18 @@ export default async function ArticleDetailPage({
                 overflow: "hidden",
                 marginBottom: 32,
                 border: "1px solid var(--border)",
+                position: "relative",
+                width: "100%",
+                height: "clamp(200px, 45vw, 400px)",
               }}>
-                <img
-                  className="article-detail-image"
-                  src={article.image}
+                <Image
+                  className="article-detail-image object-cover"
+                  src={article.image ?? '/placeholder-news.jpg'}
                   alt={article.title}
-                  loading="eager"
-                  decoding="async"
+                  fill
+                  priority
+                  sizes="(max-width: 1200px) 100vw, 1200px"
                   style={{
-                    width: "100%",
-                    height: "clamp(200px, 45vw, 400px)",
                     objectFit: "cover",
                     display: "block",
                   }}

@@ -2,6 +2,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import Image from "next/image"
 import { NewsItem } from "@/types/news"
 import { getInternalArticleLink } from "@/lib/articleLinks"
 import { trackContextEvent } from "@/lib/contextTelemetry"
@@ -71,10 +72,12 @@ export default function NewsCard({
   item,
   feedContext,
   feedPosition,
+  priority = false,
 }: {
   item: NewsItemWithAI
   feedContext?: NewsGridFeedContext
   feedPosition?: number
+  priority?: boolean
 }) {
   const color = TOPIC_COLORS[item.topic] || "var(--muted)"
   const bg = TOPIC_BG[item.topic] || "var(--surface2)"
@@ -93,6 +96,7 @@ export default function NewsCard({
   const [disliked, setDisliked] = useState(false)
   const [hidden, setHidden] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
+  const [showMoreActions, setShowMoreActions] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
   const lastTouchActivationAt = useRef(0)
   const [aiTags, setAiTags] = useState<string[]>(() => {
@@ -547,51 +551,53 @@ export default function NewsCard({
         cursor: "pointer",
       }}>
         {item.image ? (
-          <img
-            src={item.image}
-            alt={item.title}
-            loading="lazy"
-            decoding="async"
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              objectPosition: "center top",
-              transition: "transform 0.4s ease",
-            }}
-            onMouseEnter={(event) => {
-              if (!canUseHover()) return
-              event.currentTarget.style.transform = "scale(1.03)"
-            }}
-            onMouseLeave={(event) => {
-              if (!canUseHover()) return
-              event.currentTarget.style.transform = "scale(1)"
-            }}
-            onError={(event) => {
-              const wrapper = (event.currentTarget as HTMLElement).parentElement
-              if (wrapper) {
-                wrapper.style.background = bg
-                wrapper.style.display = "flex"
-                wrapper.style.alignItems = "center"
-                wrapper.style.justifyContent = "center"
-                const existing = wrapper.querySelector("[data-src-label]")
-                if (!existing) {
-                  const span = document.createElement("span")
-                  span.setAttribute("data-src-label", "true")
-                  span.style.cssText = [
-                    "font-family:'IBM Plex Mono',monospace",
-                    "font-size:11px",
-                    "letter-spacing:1px",
-                    `color:${color}`,
-                    "text-transform:uppercase",
-                    "opacity:0.7",
-                  ].join(";")
-                  span.textContent = item.source
-                  wrapper.appendChild(span)
+          <div className="relative w-full aspect-[16/9] overflow-hidden rounded-t-xl" style={{ width: "100%", height: "100%", position: "relative" }}>
+            <Image
+              src={item.image ?? '/placeholder-news.jpg'}
+              alt={item.title}
+              fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              className="object-cover"
+              priority={priority}
+              style={{
+                objectFit: "cover",
+                objectPosition: "center top",
+                transition: "transform 0.4s ease",
+              }}
+              onMouseEnter={(event) => {
+                if (!canUseHover()) return
+                event.currentTarget.style.transform = "scale(1.03)"
+              }}
+              onMouseLeave={(event) => {
+                if (!canUseHover()) return
+                event.currentTarget.style.transform = "scale(1)"
+              }}
+              onError={(event) => {
+                const wrapper = (event.currentTarget as HTMLElement).parentElement?.parentElement
+                if (wrapper) {
+                  wrapper.style.background = bg
+                  wrapper.style.display = "flex"
+                  wrapper.style.alignItems = "center"
+                  wrapper.style.justifyContent = "center"
+                  const existing = wrapper.querySelector("[data-src-label]")
+                  if (!existing) {
+                    const span = document.createElement("span")
+                    span.setAttribute("data-src-label", "true")
+                    span.style.cssText = [
+                      "font-family:'IBM Plex Mono',monospace",
+                      "font-size:11px",
+                      "letter-spacing:1px",
+                      `color:${color}`,
+                      "text-transform:uppercase",
+                      "opacity:0.7",
+                    ].join(";")
+                    span.textContent = item.source
+                    wrapper.appendChild(span)
+                  }
                 }
-              }
-            }}
-          />
+              }}
+            />
+          </div>
         ) : (
           <div style={{
             height: "100%",
@@ -952,11 +958,52 @@ export default function NewsCard({
             WebkitTapHighlightColor: "transparent",
           }}
         >
-          {loadingSummary ? "..." : summary ? (showSummary ? "hide" : "summary") : "AI"}
+          {loadingSummary ? "..." : showSummary ? "hide" : "summary"}
+        </button>
+
+        <button
+          className="card-action-btn mobile-only"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            if (shouldIgnoreFollowUpClick(e)) return
+            setShowMoreActions((v) => !v)
+          }}
+          onPointerUp={(e) => handleTouchAction(e, (ev) => {
+            ev.stopPropagation()
+            ev.preventDefault()
+            setShowMoreActions((v) => !v)
+          })}
+          onTouchEnd={(e) => handleTouchAction(e, (ev) => {
+            ev.stopPropagation()
+            ev.preventDefault()
+            setShowMoreActions((v) => !v)
+          })}
+          title="More actions"
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 14,
+            minWidth: 44,
+            minHeight: 44,
+            padding: "6px 10px",
+            background: showMoreActions ? "var(--accent-dim)" : "transparent",
+            color: showMoreActions ? "var(--accent)" : "var(--muted)",
+            border: "1px solid var(--border)",
+            borderRadius: 2,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            touchAction: "manipulation",
+            WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          ⋯
         </button>
       </div>
 
-      <div style={{
+      <div className={`card-feedback-row ${showMoreActions ? "show-on-mobile" : ""}`} style={{
         borderTop: "1px solid var(--border)",
         padding: "8px 18px 12px",
         display: "grid",

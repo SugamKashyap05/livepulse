@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { benchmarkDailyUsage, runRagEvaluation } from "@/lib/ragEval"
-import { isAdminAuthorized } from "@/lib/adminAuth"
 
 export const dynamic = "force-dynamic"
 

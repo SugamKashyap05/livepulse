@@ -140,7 +140,7 @@ function buildMemorySummary(messages: { role: string; content: string }[]) {
 }
 
 export async function POST(request: Request) {
-  if (!isAdminAuthorized(request)) {
+  if (!(await isAdminAuthorized(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

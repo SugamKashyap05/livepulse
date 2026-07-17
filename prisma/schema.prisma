@@ -38,6 +38,15 @@ model NewsArticle {
   events             UserArticleEvent[]
   reads              UserArticleRead[]
   bookmarks          UserBookmark[]
+  chunkVersion            Int                  @default(1)
+  ingestedAt              DateTime             @default(now())
+  sourceQualityScore      Float?
+  contentHash             String?
+  documentType            String               @default("news_article")
+  rejected                Boolean              @default(false)
+  rejectionReason         String?
+  visible                 Boolean              @default(true)
+  factScoreOverrideReason String?
 
   @@index([topic])
   @@index([slug])
@@ -62,6 +71,7 @@ model ArticleEmbedding {
   topic          String
   source         String
   pubDate        DateTime
+  superseded     Boolean?
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   article        NewsArticle           @relation(fields: [articleId], references: [id], onDelete: Cascade)
@@ -110,6 +120,10 @@ model AiLog {
   completionTokens Int?
   promptTokens     Int?
   provider         String?
+  query            String?
+  avgConfidence    Float?
+  chunksRetrieved  Int?
+  metadata         Json?
 }
 
 model AdminAiJob {
@@ -133,6 +147,8 @@ model AdminAiJob {
   cancelledAt       DateTime?
   parentJobId       String?
   modelVersion      String?
+  retryOf           String?
+  metadata          Json?
   auditLogs         AdminAuditLog[]
   departmentEvents  AdminDepartmentEvent[]
   notifications     AdminNotification[]
@@ -512,9 +528,21 @@ model FeedSource {
   fetchIntervalMinutes Int       @default(30)
   lastErrorAt          DateTime?
   lastErrorMessage     String?
+  retryCount           Int       @default(0)
 
   @@index([topic])
   @@index([region])
   @@index([enabled])
   @@index([enabled, lastFetched])
+}
+
+model RagQueryCache {
+  id            String   @id @default(cuid())
+  queryHash     String   @unique
+  query         String
+  results       Json
+  avgConfidence Float    @default(0)
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+  hitCount      Int      @default(0)
 }

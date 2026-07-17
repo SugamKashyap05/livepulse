@@ -1,7 +1,8 @@
 "use client"
 
 import type { CSSProperties } from "react"
-import { useMemo, useState } from "react"
+import { useMemo, useState, useTransition } from "react"
+import { runMissingSummaries, runMissingTaxonomy, runMissingSentiment, runAllMissing } from "@/app/admin/ai-manager/copy-desk/actions"
 
 export type CopyDeskQueueKind = "summary" | "tags" | "sentiment"
 type CopyDeskJobTask = "summarize" | "tag" | "sentiment"
@@ -191,11 +192,21 @@ export default function CopyDeskModule({
             topic gaps first.
           </p>
         </div>
-        <div style={statsGridStyle}>
-          <Metric label="Articles" value={totals.all} tone={totals.all > 0 ? "warn" : "good"} />
-          <Metric label="Summaries" value={totals.summary} tone={totals.summary > 0 ? "warn" : "good"} />
-          <Metric label="Tags" value={totals.tags} tone={totals.tags > 0 ? "warn" : "good"} />
-          <Metric label="Mood" value={totals.sentiment} tone={totals.sentiment > 0 ? "warn" : "good"} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-end" }}>
+          <div style={statsGridStyle}>
+            <Metric label="Articles" value={totals.all} tone={totals.all > 0 ? "warn" : "good"} />
+            <Metric label="Summaries" value={totals.summary} tone={totals.summary > 0 ? "warn" : "good"} />
+            <Metric label="Tags" value={totals.tags} tone={totals.tags > 0 ? "warn" : "good"} />
+            <Metric label="Mood" value={totals.sentiment} tone={totals.sentiment > 0 ? "warn" : "good"} />
+          </div>
+          <button
+            type="button"
+            disabled={isBusy || totals.all === 0}
+            onClick={() => runWithLoading("run_all", () => runAllMissing())}
+            style={buttonStateStyle(primaryButtonStyle, isBusy || totals.all === 0, loading === "run_all")}
+          >
+            {loading === "run_all" ? "QUEUING..." : "RUN ALL MISSING"}
+          </button>
         </div>
       </header>
 
@@ -238,9 +249,11 @@ export default function CopyDeskModule({
                   type="button"
                   disabled={items.length === 0 || isBusy}
                   onClick={() =>
-                    runWithLoading(`queue:${queue.kind}`, () =>
-                      onQueueAction ? onQueueAction(queue.kind, items) : queueKindJob(queue.kind, items)
-                    )
+                    runWithLoading(`queue:${queue.kind}`, () => {
+                      if (queue.kind === "summary") return runMissingSummaries()
+                      if (queue.kind === "tags") return runMissingTaxonomy()
+                      if (queue.kind === "sentiment") return runMissingSentiment()
+                    })
                   }
                   style={buttonStateStyle(smallButtonStyle, items.length === 0 || isBusy, loading === `queue:${queue.kind}`)}
                 >
@@ -291,18 +304,44 @@ export default function CopyDeskModule({
               <span style={{ color: countColor(row.missingSummary) }}>{row.missingSummary}</span>
               <span style={{ color: countColor(row.missingTags) }}>{row.missingTags}</span>
               <span style={{ color: countColor(row.missingSentiment) }}>{row.missingSentiment}</span>
-              <button
-                type="button"
-                disabled={!onTopicAction || backlogTotal(row) === 0 || isBusy}
-                onClick={() => runWithLoading(`topic:${row.topic}`, () => onTopicAction?.(row.topic, row))}
-                style={buttonStateStyle(
-                  smallButtonStyle,
-                  !onTopicAction || backlogTotal(row) === 0 || isBusy,
-                  loading === `topic:${row.topic}`
-                )}
-              >
-                {loading === `topic:${row.topic}` ? "RUNNING..." : "WORK TOPIC"}
-              </button>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  type="button"
+                  disabled={row.missingSummary === 0 || isBusy}
+                  onClick={() => runWithLoading(`topic:summary:${row.topic}`, () => runMissingSummaries(row.topic))}
+                  style={buttonStateStyle(
+                    smallButtonStyle,
+                    row.missingSummary === 0 || isBusy,
+                    loading === `topic:summary:${row.topic}`
+                  )}
+                >
+                  {loading === `topic:summary:${row.topic}` ? "..." : `Summaries (${row.missingSummary})`}
+                </button>
+                <button
+                  type="button"
+                  disabled={row.missingTags === 0 || isBusy}
+                  onClick={() => runWithLoading(`topic:tags:${row.topic}`, () => runMissingTaxonomy(row.topic))}
+                  style={buttonStateStyle(
+                    smallButtonStyle,
+                    row.missingTags === 0 || isBusy,
+                    loading === `topic:tags:${row.topic}`
+                  )}
+                >
+                  {loading === `topic:tags:${row.topic}` ? "..." : `Tags (${row.missingTags})`}
+                </button>
+                <button
+                  type="button"
+                  disabled={row.missingSentiment === 0 || isBusy}
+                  onClick={() => runWithLoading(`topic:sentiment:${row.topic}`, () => runMissingSentiment(row.topic))}
+                  style={buttonStateStyle(
+                    smallButtonStyle,
+                    row.missingSentiment === 0 || isBusy,
+                    loading === `topic:sentiment:${row.topic}`
+                  )}
+                >
+                  {loading === `topic:sentiment:${row.topic}` ? "..." : `Sentiment (${row.missingSentiment})`}
+                </button>
+              </div>
             </div>
           ))}
           {sortedBacklog.length === 0 && <div style={emptyBlockStyle}>No topic backlog rows.</div>}
@@ -563,7 +602,7 @@ const tableStyle: CSSProperties = {
 
 const rowStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(130px, 1.4fr) repeat(4, minmax(64px, 0.45fr)) minmax(96px, 0.7fr)",
+  gridTemplateColumns: "minmax(130px, 1.4fr) repeat(4, minmax(64px, 0.45fr)) minmax(280px, 1.5fr)",
   gap: 8,
   alignItems: "center",
   minWidth: 660,

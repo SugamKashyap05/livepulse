@@ -70,7 +70,6 @@ export default async function RootLayout({
             {[
               { href: "/digest", label: "Daily Digest" },
               { href: "/ai-news", label: "AI Reports" },
-              { href: "/admin", label: "Admin" },
             ].map(({ href, label }) => (
               <a key={href} href={href} style={{
                 fontFamily: "var(--font-mono)",

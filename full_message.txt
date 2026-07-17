@@ -1,0 +1,83 @@
+<USER_REQUEST>
+## Assessment: **5 CHECKS NEED ATTENTION. PHASE 2 IS NOT CLOSED. NO PHASE 3 BRIEF YET.**
+
+Antigravity reported 5 passes and 2 fails. The actual count is 3 clean passes and 4 issues. Two checks passed for the wrong reason. Here is the precise breakdown:
+
+---
+
+**ANTIGRAVITY — READ THIS CAREFULLY BEFORE TOUCHING ANYTHING.**
+
+---
+
+**CHECK 1 — ❌ CONFIRMED FAIL. FIX THIS FIRST.**
+
+The LLM is returning summaries without `[1]` `[2]` citation markers in the response text. Citations exist in the metadata payload but not in the generated text. These are two different things. A user reading the response has no way to know which sentence came from which source.
+
+The system prompt is not enforcing citation format strictly enough. Find `generateWithContext()` in `src/lib/ragGenerate.ts` and strengthen the instruction:
+
+```typescript
+// Replace the current citation instruction with this — more explicit, harder to ignore
+content: `You are a news assistant for LivePulse. 
+STRICT RULES — follow these without exception:
+1. You MUST cite every factual claim with a bracketed number like [1] or [2].
+2. Citations go IMMEDIATELY after the claim, before the period.
+3. You MUST NOT make any claim that cannot be supported by the sources below.
+4. If you have nothing to cite, say: "I don't have sufficient sourced information to answer this."
+5. Your response MUST contain at least one citation marker or it is incorrect.
+
+Example of correct format:
+"The company announced layoffs [1]. This affected 2,000 employees [2]."
+
+Source index:
+${sourceIndex}
+
+Sources:
+${context}`
+```
+
+After updating, test by sending "What is this article about?" again. The response text must contain `[1]` markers. If it still doesn't, the model being used (check which NIM model handles this route) may need a different prompting style — some models need the example more than others. Report what the response text looks like after the prompt update.
+
+---
+
+**CHECK 3 — ⚠️ PASSED FOR THE WRONG REASON. TH
+<truncated 8721 bytes>
+ly — 9x latency improvement 
+    (3777ms → 420ms) is excellent and confirms the 
+    RagQueryCache implementation is solid. ✅
+  • ragEval.ts running synchronously in the API route will 
+    hit Vercel's function timeout at 6 eval cases with 
+    full RAG retrieval per case. Monitor execution time — 
+    if it exceeds 25 seconds, move to async AdminAiJob 
+    queue as flagged in earlier analysis. [MEDIUM]
+
+📈 Scalability:
+  • No new scalability concerns at this stage.
+
+🤖 AI Risk:
+  • Check 3 wrong-reason pass is the most important finding 
+    in this smoke test. The model self-refusing on training 
+    cutoff grounds is non-deterministic — a different phrasing 
+    or a different NIM model could return a confident wrong 
+    answer instead. The confidence guard must catch this 
+    before it reaches the model. This is the core 
+    anti-hallucination guarantee of the entire pipeline. [CRITICAL]
+```
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-25T11:19:16+05:30.
+
+The user's current state is as follows:
+Active Document: e:\2026 final projects\news\livepulse\prisma\migrations\20260624111353_phase2_rag_pipeline\migration.sql (LANGUAGE_SQL)
+Cursor is on line: 1
+Other open documents:
+- e:\2026 final projects\news\livepulse\prisma\migrations\20260624111353_phase2_rag_pipeline\migration.sql (LANGUAGE_SQL)
+- e:\2026 final projects\news\livepulse\.env (LANGUAGE_UNSPECIFIED)
+- e:\2026 final projects\news\livepulse\src\app\api\admin\sync\route.ts (LANGUAGE_TYPESCRIPT)
+- e:\2026 final projects\news\livepulse\src\components\CitationList.tsx (LANGUAGE_TSX)
+- e:\2026 final projects\news\livepulse\src\components\ArticleAiPanel.tsx (LANGUAGE_TSX)
+Browser State:
+  Page 071C5E92292E21621510D0AE3AC22869 (LivePulse - World News) - http://localhost:3000/news/0113b53588d7fcbd266c41fadf60a265 [ACTIVE]
+    Viewport: 1536x730, Page Height: 3416
+Running terminal commands:
+- npm run dev (in e:\2026 final projects\news\livepulse, running for 20h46m59s)
+</ADDITIONAL_METADATA>

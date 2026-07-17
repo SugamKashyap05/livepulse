@@ -2,7 +2,9 @@
 "use client"
 
 import type { CSSProperties } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
+import { publishAllApproved, publishTopic, publishSingle, bulkApproveAll } from "@/app/admin/ai-manager/publishing-desk/actions"
+import ConfirmButton from "@/components/admin/ConfirmButton"
 
 export type PublishingDeskReport = {
   id: string
@@ -19,6 +21,8 @@ export type PublishingDeskReport = {
   factScore?: number | null
   biasAnalysis?: string | null
   summary?: string | null
+  aiTags?: string | null
+  sentiment?: string | null
   publicUrl?: string | null
 }
 
@@ -59,9 +63,25 @@ export default function PublishingDeskModule({
 
   const [working, setWorking] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice>(null)
+  const [isPendingTrans, startTransition] = useTransition()
+  const isBusy = working !== null || isPendingTrans
 
   const sortedPending = useMemo(() => sortReports(pending), [pending])
   const sortedPublished = useMemo(() => sortReports(published), [published])
+
+  const pendingByTopic = useMemo(() => {
+    const groups: Record<string, PublishingDeskReport[]> = {}
+    for (const report of sortedPending) {
+      const topic = report.topic || "general"
+      if (!groups[topic]) groups[topic] = []
+      groups[topic].push(report)
+    }
+    return groups
+  }, [sortedPending])
+
+  const approvedCount = useMemo(() => {
+    return sortedPending.filter(r => r.summary && r.aiTags && r.sentiment).length
+  }, [sortedPending])
 
   async function runAction(action: ActionName, report: PublishingDeskReport) {
     if (action === "discard" && !confirm("Discard this AI draft permanently? This cannot be undone.")) {
@@ -75,27 +95,52 @@ export default function PublishingDeskModule({
     const key = `${action}:${report.id}`
     setWorking(key)
     try {
-      const endpoint = `/api/admin/ai/${action}`
-      const res = await fetch(endpoint, {
-        method: action === "discard" ? "DELETE" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: report.id }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setNotice({
-          tone: "bad",
-          text: typeof data.error === "string" ? data.error : `${labelForAction(action)} failed.`,
+      if (action === "publish") {
+        await publishSingle(report.id)
+        applyLocalResult(action, report, {})
+        await onRefresh?.()
+        setNotice(successNotice(action, report, publicUrl(report, publicBasePath)))
+      } else {
+        const endpoint = `/api/admin/ai/${action}`
+        const res = await fetch(endpoint, {
+          method: action === "discard" ? "DELETE" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: report.id }),
         })
-        return
-      }
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setNotice({
+            tone: "bad",
+            text: typeof data.error === "string" ? data.error : `${labelForAction(action)} failed.`,
+          })
+          return
+        }
 
-      applyLocalResult(action, report, data)
-      await onRefresh?.()
-      setNotice(successNotice(action, report, publicUrl(report, publicBasePath)))
+        applyLocalResult(action, report, data)
+        await onRefresh?.()
+        setNotice(successNotice(action, report, publicUrl(report, publicBasePath)))
+      }
     } catch (error) {
       console.error("[publishing desk]", action, error)
       setNotice({ tone: "bad", text: `${labelForAction(action)} failed.` })
+    } finally {
+      setWorking(null)
+    }
+  }
+
+  async function handleBulkPublish(topic?: string) {
+    setWorking(topic ? `publish_topic:${topic}` : "publish_all")
+    try {
+      if (topic) {
+        const count = await publishTopic(topic)
+        setNotice({ tone: "good", text: `Published ${count} approved drafts in ${topic}.` })
+      } else {
+        const count = await bulkApproveAll()
+        setNotice({ tone: "good", text: `Approved and published ${count} drafts globally.` })
+      }
+      await onRefresh?.()
+    } catch (e) {
+      setNotice({ tone: "bad", text: "Bulk publish failed." })
     } finally {
       setWorking(null)
     }
@@ -165,46 +210,76 @@ export default function PublishingDeskModule({
           <span>Public Route</span>
           <strong>{publicBasePath}</strong>
         </div>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}>
+          <ConfirmButton
+            disabled={isBusy || approvedCount === 0}
+            onClick={() => startTransition(() => handleBulkPublish())}
+            style={buttonStateStyle(primaryButtonStyle, isBusy || approvedCount === 0, working === "publish_all")}
+            confirmText="CONFIRM PUBLISH ALL"
+          >
+            {working === "publish_all" ? "PUBLISHING..." : `PUBLISH ALL APPROVED (${approvedCount})`}
+          </ConfirmButton>
+        </div>
       </div>
 
       <div style={deskGridStyle}>
         <div style={panelStyle}>
           <div style={panelHeaderStyle}>
-            <span>PENDING AI DRAFTS</span>
+            <span>PENDING AI DRAFTS BY TOPIC</span>
             <span>{sortedPending.length}</span>
           </div>
           <div style={listStyle}>
-            {sortedPending.map((report) => (
-              <article key={report.id} style={itemStyle}>
-                <ReportBody report={report} publicBasePath={publicBasePath} status="Draft" />
-                <div style={buttonGridStyle}>
-                  <button
-                    type="button"
-                    disabled={working !== null}
-                    onClick={() => runAction("reanalyse", report)}
-                    style={buttonStateStyle(secondaryButtonStyle, working !== null, working === `reanalyse:${report.id}`)}
-                  >
-                    {working === `reanalyse:${report.id}` ? "ANALYSING..." : "REANALYSE"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={working !== null}
-                    onClick={() => runAction("publish", report)}
-                    style={buttonStateStyle(primaryButtonStyle, working !== null, working === `publish:${report.id}`)}
-                  >
-                    {working === `publish:${report.id}` ? "PUBLISHING..." : "PUBLISH"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={working !== null}
-                    onClick={() => runAction("discard", report)}
-                    style={buttonStateStyle(dangerButtonStyle, working !== null, working === `discard:${report.id}`)}
-                  >
-                    {working === `discard:${report.id}` ? "DISCARDING..." : "DISCARD"}
-                  </button>
+            {Object.entries(pendingByTopic).map(([topic, reports]) => {
+              const topicApprovedCount = reports.filter(r => r.summary && r.aiTags && r.sentiment).length
+              return (
+                <div key={topic} style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <h3 style={{ margin: 0, fontSize: 12, textTransform: "uppercase", color: "var(--accent)" }}>{topic} ({reports.length})</h3>
+                    <button
+                      type="button"
+                      disabled={isBusy || topicApprovedCount === 0}
+                      onClick={() => startTransition(() => handleBulkPublish(topic))}
+                      style={buttonStateStyle(smallButtonStyle, isBusy || topicApprovedCount === 0, working === `publish_topic:${topic}`)}
+                    >
+                      {working === `publish_topic:${topic}` ? "..." : `PUBLISH TOPIC (${topicApprovedCount})`}
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {reports.map((report) => (
+                      <article key={report.id} style={itemStyle}>
+                        <ReportBody report={report} publicBasePath={publicBasePath} status="Draft" />
+                        <div style={buttonGridStyle}>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => startTransition(() => runAction("reanalyse", report))}
+                            style={buttonStateStyle(secondaryButtonStyle, isBusy, working === `reanalyse:${report.id}`)}
+                          >
+                            {working === `reanalyse:${report.id}` ? "ANALYSING..." : "REANALYSE"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => startTransition(() => runAction("publish", report))}
+                            style={buttonStateStyle(primaryButtonStyle, isBusy, working === `publish:${report.id}`)}
+                          >
+                            {working === `publish:${report.id}` ? "PUBLISHING..." : "PUBLISH"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => startTransition(() => runAction("discard", report))}
+                            style={buttonStateStyle(dangerButtonStyle, isBusy, working === `discard:${report.id}`)}
+                          >
+                            {working === `discard:${report.id}` ? "DISCARDING..." : "DISCARD"}
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
                 </div>
-              </article>
-            ))}
+              )
+            })}
             {sortedPending.length === 0 && <div style={emptyStyle}>No AI drafts waiting for publication.</div>}
           </div>
         </div>
@@ -226,9 +301,9 @@ export default function PublishingDeskModule({
                     </a>
                     <button
                       type="button"
-                      disabled={working !== null}
-                      onClick={() => runAction("unpublish", report)}
-                      style={buttonStateStyle(dangerButtonStyle, working !== null, working === `unpublish:${report.id}`)}
+                      disabled={isBusy}
+                      onClick={() => startTransition(() => runAction("unpublish", report))}
+                      style={buttonStateStyle(dangerButtonStyle, isBusy, working === `unpublish:${report.id}`)}
                     >
                       {working === `unpublish:${report.id}` ? "UNPUBLISHING..." : "UNPUBLISH"}
                     </button>
@@ -498,6 +573,18 @@ const primaryButtonStyle: CSSProperties = {
   background: "var(--accent)",
   border: "1px solid var(--accent)",
   color: "#000",
+}
+
+const smallButtonStyle: CSSProperties = {
+  minHeight: 28,
+  padding: "5px 8px",
+  background: "transparent",
+  border: "1px solid var(--border2)",
+  borderRadius: 4,
+  color: "var(--muted)",
+  cursor: "pointer",
+  fontFamily: "var(--font-mono)",
+  fontSize: 9,
 }
 
 const secondaryButtonStyle: CSSProperties = {

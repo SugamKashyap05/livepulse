@@ -55,6 +55,7 @@ export type VerificationRoomModuleProps = {
   duplicateSourceWarnings: VerificationDuplicateWarning[]
   onRunFactCheck?: () => void | Promise<void>
   onReanalyse?: () => void | Promise<void>
+  onDismissWarnings?: () => void | Promise<void>
   onRefresh?: () => void | Promise<void>
   factCheckEndpoint?: string
   reanalyseEndpoint?: string
@@ -62,7 +63,7 @@ export type VerificationRoomModuleProps = {
   reanalysePayload?: Record<string, unknown>
 }
 
-type VerificationAction = "fact-check" | "reanalyse"
+type VerificationAction = "fact-check" | "reanalyse" | "dismiss-warnings"
 
 type Notice = {
   tone: "good" | "warn" | "bad"
@@ -77,6 +78,7 @@ export default function VerificationRoomModule({
   duplicateSourceWarnings,
   onRunFactCheck,
   onReanalyse,
+  onDismissWarnings,
   onRefresh,
   factCheckEndpoint = "/api/admin/ai/jobs",
   reanalyseEndpoint = "/api/admin/ai/jobs",
@@ -106,6 +108,8 @@ export default function VerificationRoomModule({
         await onRunFactCheck()
       } else if (action === "reanalyse" && onReanalyse) {
         await onReanalyse()
+      } else if (action === "dismiss-warnings" && onDismissWarnings) {
+        await onDismissWarnings()
       } else {
         const endpoint = action === "fact-check" ? factCheckEndpoint : reanalyseEndpoint
         const payload =
@@ -153,6 +157,9 @@ export default function VerificationRoomModule({
         <div style={buttonRailStyle}>
           <ActionButton label="RUN FACT-CHECK" loading={working === "fact-check"} disabled={working !== null} onClick={() => runAction("fact-check")} />
           <ActionButton label="REANALYSE DRAFTS" loading={working === "reanalyse"} disabled={working !== null} onClick={() => runAction("reanalyse")} variant="secondary" />
+          {onDismissWarnings && warningCount > 0 && (
+            <ActionButton label="DISMISS WARNINGS" loading={working === "dismiss-warnings"} disabled={working !== null} onClick={() => runAction("dismiss-warnings")} variant="secondary" />
+          )}
           {onRefresh && (
             <button
               type="button"
@@ -307,6 +314,7 @@ function ActionButton({ label, loading, disabled, onClick, variant = "primary" }
 }
 
 function labelForAction(action: VerificationAction) {
+  if (action === "dismiss-warnings") return "Dismiss warnings"
   return action === "fact-check" ? "Fact-check" : "Reanalysis"
 }
 

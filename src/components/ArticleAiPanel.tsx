@@ -4,10 +4,13 @@ import type { CSSProperties, FormEvent, ReactNode } from "react"
 import { useEffect, useRef, useState } from "react"
 import { trackContextEvent } from "@/lib/contextTelemetry"
 import { useAuthGate, useSession } from "@/context/AuthGateContext"
+import type { Citation } from "@/lib/ragTypes"
+import { CitationList } from "./CitationList"
 
 type ChatMessage = {
   role: "user" | "assistant"
   content: string
+  citations?: Citation[]
 }
 
 type StreamEvent = {
@@ -34,9 +37,9 @@ const SENTIMENT_CONFIG = {
 }
 
 const SUGGESTED_QUESTIONS = [
-  "What are the key facts?",
-  "Why does this matter?",
-  "What should I watch next?",
+  "Key facts",
+  "Why it matters",
+  "What to watch",
 ]
 
 function parseTags(aiTags: string | null) {
@@ -350,10 +353,19 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
             if (event.type === "done") {
               const finalContent =
                 typeof event.content === "string" ? event.content : accumulated
+              
+              // Event is typed loosely, but we pass contextStats in the route
+              const anyEvent = event as any
+              const citations = anyEvent.contextStats?.insufficientEvidence ? [] : (anyEvent.contextStats?.citations || [])
+
               setStreamingContent("")
               setMessages((prev) => [
                 ...prev.slice(-11),
-                { role: "assistant", content: finalContent },
+                { 
+                  role: "assistant", 
+                  content: finalContent,
+                  citations: citations
+                },
               ])
             }
 
@@ -584,6 +596,10 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
                 {message.role === "assistant"
                   ? formatAIResponse(message.content)
                   : message.content}
+                
+                {message.citations && message.citations.length > 0 && (
+                  <CitationList citations={message.citations} />
+                )}
               </div>
             ))}
 
@@ -671,7 +687,7 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
 function StatusPill({ label, value }: { label: string; value: string }) {
   return (
     <div style={statusPillStyle}>
-      <span style={statusLabelStyle}>{label}</span>
+      <span style={statusLabelStyle}>{label}</span>{" "}
       <span style={statusValueStyle}>{value}</span>
     </div>
   )

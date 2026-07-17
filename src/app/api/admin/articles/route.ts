@@ -3,7 +3,7 @@ import { isAdminAuthorized } from "@/lib/adminAuth"
 import { prisma } from "@/lib/db"
 
 export async function DELETE(request: Request) {
-  if (!isAdminAuthorized(request)) {
+  if (!(await isAdminAuthorized(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

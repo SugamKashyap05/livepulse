@@ -43,6 +43,7 @@ async function runSync() {
         failCount: 0,
         lastErrorAt: null,
         lastErrorMessage: null,
+        retryCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       }))

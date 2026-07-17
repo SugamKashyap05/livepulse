@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   if (!isRunNextAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  const adminRequested = isAdminAuthorized(request)
+  const adminRequested = await isAdminAuthorized(request)
 
   try {
     await Promise.all([

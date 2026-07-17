@@ -4,7 +4,7 @@ import { isAdminAuthorized } from "@/lib/adminAuth"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
-  if (!isAdminAuthorized(request)) {
+  if (!(await isAdminAuthorized(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

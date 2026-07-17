@@ -1,7 +1,9 @@
 "use client"
 
 import type { CSSProperties } from "react"
-import { useMemo, useState } from "react"
+import { useMemo, useState, useTransition } from "react"
+import { cancelAllPendingJobs, retryAllFailedJobs, purgeOldJobs, runMigrations, queueReindexAll } from "@/app/admin/ai-manager/operations/actions"
+import ConfirmButton from "@/components/admin/ConfirmButton"
 
 export type OperationsRoomJobStatus =
   | "queued"
@@ -57,6 +59,7 @@ export default function OperationsRoomModule({
 }: OperationsRoomModuleProps) {
   const [groups, setGroups] = useState(jobs)
   const [action, setAction] = useState<ActionState | null>(null)
+  const [isPending, startTransition] = useTransition()
 
   const totals = useMemo(
     () => ({
@@ -114,38 +117,91 @@ export default function OperationsRoomModule({
           </p>
         </div>
         <div style={headerActionsStyle}>
+          <ConfirmButton
+            onClick={() => {
+              startTransition(async () => {
+                try {
+                  await cancelAllPendingJobs()
+                  setAction({ key: "cancel-all", message: "All pending jobs cancelled.", tone: "good" })
+                } catch (e) {
+                  setAction({ key: "cancel-all", message: "Failed to cancel jobs.", tone: "bad" })
+                }
+              })
+            }}
+            disabled={actionBusy || isPending}
+            style={buttonStateStyle(ghostButtonStyle, actionBusy || isPending)}
+            confirmText="CONFIRM CANCEL"
+          >
+            {isPending && action?.key === "cancel-all" ? "CANCELLING..." : "CANCEL PENDING"}
+          </ConfirmButton>
           <button
             type="button"
-            onClick={() =>
-              postJobAction(
-                "run-next",
-                "/api/admin/ai/jobs/run-next",
-                "Pipeline check completed."
-              )
-            }
-            disabled={actionBusy}
-            style={buttonStateStyle(primaryButtonStyle, actionBusy)}
+            onClick={() => {
+              startTransition(async () => {
+                try {
+                  await retryAllFailedJobs()
+                  setAction({ key: "retry-all", message: "All failed jobs queued for retry.", tone: "good" })
+                } catch (e) {
+                  setAction({ key: "retry-all", message: "Failed to retry jobs.", tone: "bad" })
+                }
+              })
+            }}
+            disabled={actionBusy || isPending || totals.failed === 0}
+            style={buttonStateStyle(primaryButtonStyle, actionBusy || isPending)}
           >
-            {action?.key === "run-next" && action.message === "Working..."
-              ? "RUNNING..."
-              : "RUN NEXT"}
+            {isPending && action?.key === "retry-all" ? "QUEUING..." : "RETRY FAILED"}
           </button>
+          <ConfirmButton
+            onClick={() => {
+              startTransition(async () => {
+                try {
+                  await purgeOldJobs()
+                  setAction({ key: "purge-old", message: "Old jobs purged.", tone: "good" })
+                } catch (e) {
+                  setAction({ key: "purge-old", message: "Failed to purge jobs.", tone: "bad" })
+                }
+              })
+            }}
+            disabled={actionBusy || isPending}
+            style={buttonStateStyle(ghostButtonStyle, actionBusy || isPending)}
+            confirmText="CONFIRM PURGE"
+          >
+            {isPending && action?.key === "purge-old" ? "PURGING..." : "PURGE > 7 DAYS"}
+          </ConfirmButton>
           <button
             type="button"
-            onClick={() =>
-              postJobAction(
-                "recover-stale",
-                "/api/admin/ai/jobs/run-next",
-                "Stale recovery check completed."
-              )
-            }
-            disabled={actionBusy}
-            style={buttonStateStyle(ghostButtonStyle, actionBusy)}
+            onClick={() => {
+              startTransition(async () => {
+                try {
+                  await runMigrations()
+                  setAction({ key: "run-migrations", message: "Migrations queued.", tone: "good" })
+                } catch (e) {
+                  setAction({ key: "run-migrations", message: "Failed to queue migrations.", tone: "bad" })
+                }
+              })
+            }}
+            disabled={actionBusy || isPending}
+            style={buttonStateStyle(ghostButtonStyle, actionBusy || isPending)}
           >
-            {action?.key === "recover-stale" && action.message === "Working..."
-              ? "CHECKING..."
-              : "RECOVER STALE JOBS"}
+            {isPending && action?.key === "run-migrations" ? "QUEUING..." : "RUN MIGRATIONS"}
           </button>
+          <ConfirmButton
+            onClick={() => {
+              startTransition(async () => {
+                try {
+                  await queueReindexAll()
+                  setAction({ key: "reindex-all", message: "Full reindex queued.", tone: "good" })
+                } catch (e) {
+                  setAction({ key: "reindex-all", message: "Failed to queue reindex.", tone: "bad" })
+                }
+              })
+            }}
+            disabled={actionBusy || isPending}
+            style={buttonStateStyle(ghostButtonStyle, actionBusy || isPending)}
+            confirmText="CONFIRM REINDEX"
+          >
+            {isPending && action?.key === "reindex-all" ? "QUEUING..." : "REINDEX ALL"}
+          </ConfirmButton>
         </div>
       </header>
 
