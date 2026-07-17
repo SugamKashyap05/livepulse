@@ -72,6 +72,7 @@ export async function runTestQuery(query: string) {
     }
     const data = await res.json()
     return data
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     throw new Error(error.message || "Test query failed")
   }

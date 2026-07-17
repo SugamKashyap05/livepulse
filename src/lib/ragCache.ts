@@ -44,6 +44,7 @@ export async function cachedHybridSearch(
     create: {
       queryHash,
       query,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       results: trusted as any,
       avgConfidence: avgConf,
       expiresAt: new Date(Date.now() + CACHE_TTL_MS),
@@ -51,6 +52,7 @@ export async function cachedHybridSearch(
     },
     update: {
       query,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       results: trusted as any,
       avgConfidence: avgConf,
       expiresAt: new Date(Date.now() + CACHE_TTL_MS),

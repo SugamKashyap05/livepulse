@@ -355,6 +355,7 @@ export default function ArticleAiPanel({ article }: ArticleAiPanelProps) {
                 typeof event.content === "string" ? event.content : accumulated
               
               // Event is typed loosely, but we pass contextStats in the route
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const anyEvent = event as any
               const citations = anyEvent.contextStats?.insufficientEvidence ? [] : (anyEvent.contextStats?.citations || [])
 

@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { SignJWT } = require('jose');
 
 async function main() {

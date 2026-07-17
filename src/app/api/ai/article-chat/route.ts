@@ -187,6 +187,7 @@ export async function POST(request: Request) {
       .join("\n")
 
     let ragFailed = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let hybridResults: any[] = [] // Using any[] to bypass type mismatch for now, we know it is ScoredChunk[]
     let citations: Citation[] = []
     let avgConf = 0
@@ -210,6 +211,7 @@ export async function POST(request: Request) {
           chunksRetrieved: hybridResults.length,
           metadata: {
             cacheStatus: cacheResult.cached ? "cache_hit" : "cache_miss",
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } as any
         }
       }).catch(() => {})
@@ -255,6 +257,7 @@ export async function POST(request: Request) {
           avgConfidence: avgConf,
           metadata: {
             reason: "Insufficient evidence or confidence too low",
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } as any
         }
       }).catch(() => {})
@@ -262,7 +265,7 @@ export async function POST(request: Request) {
 
     const articleContext = buildArticleSystemContext(focusArticle)
     
-    let contextStats = {
+    const contextStats = {
       hasArticle: !!focusArticle,
       relatedCount: 0,
       globalCount: 0,

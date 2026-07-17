@@ -38,12 +38,14 @@ vi.mock("@/lib/ollama", () => ({
   MODELS: { smart: "test-model" },
   AI_PROVIDER: "test-provider",
   logAiAction: vi.fn().mockResolvedValue({}),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ollamaChatStream: vi.fn().mockImplementation(async function* (messages: any) {
     yield { choices: [{ delta: { content: "Test response" } }] }
   })
 }))
 
 // Helper to create Request object
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createRequest(body: any) {
   return new Request("http://localhost/api/ai/article-chat", {
     method: "POST",
@@ -72,6 +74,7 @@ function getSystemPrompt() {
   const calls = vi.mocked(ollamaChatStream).mock.calls
   if (calls.length === 0) return null
   const messages = calls[calls.length - 1][0]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const systemMsg = messages.find((m: any) => m.role === "system")
   return systemMsg ? systemMsg.content : null
 }
@@ -85,6 +88,7 @@ describe("POST /api/ai/article-chat", () => {
   it("scenario 1: returns real response for meta-question despite low RAG confidence", async () => {
     vi.mocked(prisma.newsArticle.findFirst).mockResolvedValue({
       id: "123", title: "Test Article", summary: "Test summary", topic: "test"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     vi.mocked(cachedHybridSearch).mockResolvedValue({
       trusted: [], avgConf: 0, cached: false
@@ -105,6 +109,7 @@ describe("POST /api/ai/article-chat", () => {
   it("scenario 2: appends caveat for factual question with low RAG confidence", async () => {
     vi.mocked(prisma.newsArticle.findFirst).mockResolvedValue({
       id: "123", title: "Test Article", summary: "Test summary", topic: "test"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     vi.mocked(cachedHybridSearch).mockResolvedValue({
       trusted: [], avgConf: 0.1, cached: false
@@ -124,8 +129,10 @@ describe("POST /api/ai/article-chat", () => {
   it("scenario 3: standard response for factual question with high RAG confidence", async () => {
     vi.mocked(prisma.newsArticle.findFirst).mockResolvedValue({
       id: "123", title: "Test Article", summary: "Test summary", topic: "test"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     vi.mocked(cachedHybridSearch).mockResolvedValue({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       trusted: [{ id: "chunk1", title: "Chunk 1", content: "details", confidence: { sourceQualityScore: 0.9 } } as any],
       avgConf: 0.9,
       cached: false
@@ -178,6 +185,7 @@ describe("POST /api/ai/article-chat", () => {
   it("scenario 6: meta-intent summarize request, summary=NULL, description present -> expects description used", async () => {
     vi.mocked(prisma.newsArticle.findFirst).mockResolvedValue({
       id: "123", title: "Test Article", summary: null, description: "Test description", topic: "test"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     vi.mocked(cachedHybridSearch).mockResolvedValue({
       trusted: [], avgConf: 0.1, cached: false
@@ -199,6 +207,7 @@ describe("POST /api/ai/article-chat", () => {
   it("scenario 7: meta-intent summarize request, summary=NULL, description=NULL -> expects soft refusal from LLM", async () => {
     vi.mocked(prisma.newsArticle.findFirst).mockResolvedValue({
       id: "123", title: "Test Article", summary: null, description: null, topic: "test"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     
     vi.mocked(cachedHybridSearch).mockResolvedValue({
@@ -208,6 +217,7 @@ describe("POST /api/ai/article-chat", () => {
     // To simulate the LLM soft refusing because it lacks description/summary, we mock ollamaChatStream to return the refusal
     vi.mocked(ollamaChatStream).mockImplementation((async function* () {
       yield { choices: [{ delta: { content: "I cannot answer this based on the provided context." } }] }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }) as any)
 
     const req = createRequest({ articleId: "123", messages: [{ role: "user", content: "summarize this article" }] })
@@ -228,6 +238,7 @@ describe("POST /api/ai/article-chat", () => {
   it("scenario 8: delegates to runGeneralChat for cross-article intent", async () => {
     vi.mocked(prisma.newsArticle.findFirst).mockResolvedValue({
       id: "123", title: "Test Article", summary: "Test summary", topic: "test"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     vi.mocked(cachedHybridSearch).mockResolvedValue({
       trusted: [], avgConf: 0, cached: false

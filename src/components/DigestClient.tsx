@@ -48,7 +48,7 @@ export default function DigestClient({
             textDecoration: "none"
           }}
         >
-          Browse today's articles →
+          Browse today&apos;s articles &rarr;
         </Link>
       </div>
     )

@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs = require('fs');
 const text = fs.readFileSync('output3.txt', 'utf16le');
 let fullText = '';

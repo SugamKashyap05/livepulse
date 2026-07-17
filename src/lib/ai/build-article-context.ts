@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function buildArticleSystemContext(focusArticle: any): string {
   if (!focusArticle) {
     return ""

@@ -1,11 +1,14 @@
 export {};
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 require('tsconfig-paths/register');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 async function main() {
   const query = "What is this article about?\nGold falls below $4,000/oz on strong dollar, hawkish Fed signals\nmarkets";
   
   // mock hybridSearch logic
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { embedText } = require('./src/lib/ollama.ts');
   const embedding = await embedText(query, "query");
   const embeddingString = `[${embedding.join(',')}]`;

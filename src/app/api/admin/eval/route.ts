@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   try {
     const { runEval } = await request.json().catch(() => ({ runEval: false }))
     
-    let evalResults = null
+    const evalResults = null
     if (runEval) {
       await runRagEvaluation()
     }
