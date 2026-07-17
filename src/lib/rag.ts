@@ -328,15 +328,16 @@ export async function searchRagContext({
       e."pubDate",
       a."title",
       a."link",
-      e."embedding" <=> ${vectorLiteral}::vector AS "distance"
+      (e."embedding" <=> ${vectorLiteral}::vector) 
+      - (CASE WHEN ${topicFilter}::text IS NOT NULL AND e."topic" = ${topicFilter} THEN 0.05 ELSE 0 END) AS "distance"
     FROM "ArticleEmbedding" e
     INNER JOIN "NewsArticle" a ON a."id" = e."articleId"
     WHERE a."published" = true
       AND e."embeddingModel" = ${EMBEDDING_MODEL}
       AND e."embeddingDim" = ${EMBEDDING_DIM}
-      AND (${topicFilter}::text IS NULL OR e."topic" = ${topicFilter})
       AND (${articleId}::text IS NULL OR e."articleId" <> ${articleId})
-    ORDER BY e."embedding" <=> ${vectorLiteral}::vector ASC
+    ORDER BY (e."embedding" <=> ${vectorLiteral}::vector) 
+      - (CASE WHEN ${topicFilter}::text IS NOT NULL AND e."topic" = ${topicFilter} THEN 0.05 ELSE 0 END) ASC
     LIMIT ${fetchLimit}
   `
 

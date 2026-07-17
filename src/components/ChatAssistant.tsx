@@ -159,6 +159,8 @@ export default function ChatAssistant() {
   const currentTopic = pathname.startsWith("/topic/")
     ? pathname.split("/topic/")[1].split("/")[0]
     : "all"
+  const articleIdMatch = pathname.match(/^\/news\/([^/]+)/)
+  const currentArticleId = articleIdMatch ? articleIdMatch[1] : undefined
 
   const { triggerAuthGate } = useAuthGate()
   const { hasSession } = useSession()
@@ -193,13 +195,15 @@ export default function ChatAssistant() {
     setStreamingContent("")
 
     try {
-      const response = await fetch("/api/ai/chat", {
+      const endpoint = currentArticleId ? "/api/ai/article-chat" : "/api/ai/chat"
+      const payload = currentArticleId
+        ? { messages: nextMessages, articleId: currentArticleId, topic: currentTopic }
+        : { messages: nextMessages, topic: currentTopic }
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: nextMessages,
-          topic: currentTopic,
-        }),
+        body: JSON.stringify(payload),
       })
 
       if (response.status === 401) {

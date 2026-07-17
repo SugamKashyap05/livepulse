@@ -127,7 +127,7 @@ export function AuthGateModal() {
         {/* CTAs */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <button
-            onClick={() => { closeAuthGate(); router.push('/auth/signin'); }}
+            onClick={() => { closeAuthGate(); router.push('/login'); }}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -147,7 +147,7 @@ export function AuthGateModal() {
             Sign in
           </button>
           <button
-            onClick={() => { closeAuthGate(); router.push('/auth/signup'); }}
+            onClick={() => { closeAuthGate(); router.push('/signup'); }}
             style={{
               width: '100%',
               padding: '12px 16px',
