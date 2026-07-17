@@ -1,3 +1,4 @@
+export {};
 require('tsconfig-paths/register');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
